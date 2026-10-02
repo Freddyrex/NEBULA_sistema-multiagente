@@ -1307,6 +1307,32 @@ async def nebula_register(
 
 
 
+@app.post("/platform/firebase_auth")
+async def nebula_firebase_auth(
+    request: Request,
+    session: dict = Depends(get_session),
+    user: str = Form(...),
+    email: str = Form(default=""),
+):
+    """
+    Authenticate user via Firebase. Creates user if not exists.
+    """
+    try:
+        user_list = await list_users()
+        username = user.replace("@", "_").replace(".", "_").upper()
+        if username not in user_list:
+            # Create user with default password for Firebase auth
+            await add_user(username, "firebase_auth", "user")
+        # Set session
+        session["user"] = username
+        session["role"] = "user"
+        return JSONResponse({"message": "Login successful"}, status_code=200)
+    except Exception as e:
+        logging.exception(f"Firebase auth error: {e}")
+        return JSONResponse({"message": "Firebase auth failed", "error": str(e)}, status_code=401)
+
+
+
 @app.get("/platform/user/delete/{user}/")
 async def nebula_delete_user(user: str, request: Request, session: dict = Depends(get_session)):
     """

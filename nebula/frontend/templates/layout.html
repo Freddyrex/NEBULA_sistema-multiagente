@@ -200,6 +200,34 @@
         window.googleProvider = new GoogleAuthProvider();
         window.firebaseGoogleSignIn = signInWithPopup;
         window.firebaseSignOut = signOut;
+        window.handleFirebaseSignIn = async function(result) {
+            const user = result.user;
+            const formData = new URLSearchParams({
+                user: user.displayName || user.email,
+                email: user.email || ''
+            });
+            try {
+                const response = await fetch('/platform/firebase_auth', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'Accept': 'application/json'
+                    },
+                    body: formData,
+                    credentials: 'include'
+                });
+                const data = await response.json();
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    console.error('Firebase auth failed', data);
+                }
+            } catch (e) {
+                console.error('Firebase auth error', e);
+            }
+        };
+        // Override the button handlers to also process result
+
     </script>
 
 </head>
@@ -247,7 +275,7 @@
                             </li>
                             <li class="px-4 py-2">
                                 <div class="text-center mb-2" style="font-size: small; color: #666;">Or sign in with</div>
-                                <button type="button" id="firebase-login-btn" class="btn btn-outline-dark w-100" onclick="firebaseGoogleSignIn(window.firebaseAuth, window.googleProvider)">
+                                <button type="button" id="firebase-login-btn" class="btn btn-outline-dark w-100" onclick="firebaseGoogleSignIn(window.firebaseAuth, window.googleProvider).then(window.handleFirebaseSignIn).catch(e=>console.error(e))">
                                     <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google logo" style="height: 18px; margin-right: 8px;">
                                     Sign in with Google
                                 </button>
