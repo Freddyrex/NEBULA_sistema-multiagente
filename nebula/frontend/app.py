@@ -1319,13 +1319,26 @@ async def nebula_firebase_auth(
     """
     try:
         user_list = await list_users()
-        username = user.replace("@", "_").replace(".", "_").upper()
-        if username not in user_list:
-            # Create user with default password for Firebase auth
-            await add_user(username, "firebase_auth", "user")
-        # Set session
-        session["user"] = username
-        session["role"] = "user"
+        # Sanitize username
+        base_username = user or email or "firebase_user"
+        username = base_username.replace("@", "_").replace(".", "_").replace(" ", "_")
+        username_upper = username.upper()
+        if username_upper not in [u["user"] for u in user_list] if user_list else True:
+            try:
+                await add_user(username_upper, "firebase_auth", "user")
+            except Exception as e:
+                logging.warning(f"Could not add firebase user: {e}")
+        session["user"] = username_upper
+        # Get role if exists
+        try:
+            for u in await list_users():
+                if u["user"] == username_upper:
+                    session["role"] = u["role"]
+                    break
+            else:
+                session["role"] = "user"
+        except:
+            session["role"] = "user"
         return JSONResponse({"message": "Login successful"}, status_code=200)
     except Exception as e:
         logging.exception(f"Firebase auth error: {e}")
