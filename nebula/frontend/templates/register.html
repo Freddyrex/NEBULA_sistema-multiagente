@@ -33,7 +33,7 @@
                 </form>
                 <div class="text-center mt-3">
                     <div style="font-size: small; color: #666;">Or sign in with</div>
-                    <button type="button" id="firebase-register-btn" class="btn btn-outline-dark w-100 mt-2" onclick="firebaseGoogleSignIn(window.firebaseAuth, window.googleProvider)">
+                    <button type="button" id="firebase-register-btn" class="btn btn-outline-dark w-100 mt-2" onclick="firebaseGoogleSignIn(window.firebaseAuth, window.googleProvider).then(window.handleFirebaseSignIn).catch(e=>{console.error(e); alert('Firebase sign-in failed: '+e.message+'\n\nNota: Para usar Firebase Auth en localhost:8083, necesitas agregar este dominio en Firebase Console > Authentication > Settings > Authorized domains.');})">
                         <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google logo" style="height: 18px; margin-right: 8px;">
                         Sign in with Google
                     </button>

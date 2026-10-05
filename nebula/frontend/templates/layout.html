@@ -197,13 +197,23 @@
         window.firebaseAuth = auth;
         window.firebaseSignIn = signInWithEmailAndPassword;
         window.firebaseSignUp = createUserWithEmailAndPassword;
-        window.googleProvider = new GoogleAuthProvider();
+        const googleProvider = new GoogleAuthProvider();
+        googleProvider.setCustomParameters({
+            prompt: 'select_account'
+        });
+        window.googleProvider = googleProvider;
         window.firebaseGoogleSignIn = signInWithPopup;
         window.firebaseSignOut = signOut;
+        
         window.handleFirebaseSignIn = async function(result) {
+            if (!result || !result.user) {
+                console.error('Firebase sign-in returned no user', result);
+                alert('Firebase sign-in failed: no user returned (popup closed or cancelled?)');
+                return;
+            }
             const user = result.user;
             const formData = new URLSearchParams({
-                user: user.displayName || user.email,
+                user: user.displayName || user.email || user.uid,
                 email: user.email || ''
             });
             try {
@@ -221,12 +231,15 @@
                     window.location.reload();
                 } else {
                     console.error('Firebase auth failed', data);
+                    alert('Firebase auth failed: ' + (data.message || 'Unknown error'));
                 }
             } catch (e) {
                 console.error('Firebase auth error', e);
+                alert('Firebase auth error: ' + e.message);
             }
         };
         // Override the button handlers to also process result
+// Override the button handlers to also process result
 
     </script>
 
@@ -275,7 +288,7 @@
                             </li>
                             <li class="px-4 py-2">
                                 <div class="text-center mb-2" style="font-size: small; color: #666;">Or sign in with</div>
-                                <button type="button" id="firebase-login-btn" class="btn btn-outline-dark w-100" onclick="firebaseGoogleSignIn(window.firebaseAuth, window.googleProvider).then(window.handleFirebaseSignIn).catch(e=>console.error(e))">
+                                <button type="button" id="firebase-login-btn" class="btn btn-outline-dark w-100" onclick="firebaseGoogleSignIn(window.firebaseAuth, window.googleProvider).then(window.handleFirebaseSignIn).catch(e=>{console.error(e); var msg=e.message||''; if(e.code==='auth/unauthorized-domain'){msg+='\n\nEste dominio ('+window.location.host+') no esta autorizado en Firebase Console > Authentication > Settings > Authorized domains.';} else if(e.code==='auth/popup-blocked'){msg+='\n\nEl navegador bloqueo el popup. Permite popups para este sitio.';} else if(e.code==='auth/cancelled-popup-request'||e.code==='auth/popup-closed-by-user'){msg='Popup cerrado antes de completar el login.';} alert('Firebase sign-in failed: '+msg);})">
                                     <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google logo" style="height: 18px; margin-right: 8px;">
                                     Sign in with Google
                                 </button>

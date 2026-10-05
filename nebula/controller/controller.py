@@ -15,6 +15,7 @@ import uvicorn
 from fastapi import Body, FastAPI, Request, status, HTTPException, Path, File, UploadFile
 from fastapi.concurrency import asynccontextmanager
 
+from nebula.controller.api import include_api, init_api
 from nebula.controller.database import scenario_set_all_status_to_finished, scenario_set_status_to_finished
 from nebula.controller.http_helpers import remote_get, remote_post_form
 from nebula.utils import DockerUtils
@@ -111,6 +112,7 @@ async def lifespan(app: FastAPI):
     from nebula.controller.database import initialize_databases
 
     await initialize_databases(databases_dir)
+    init_api()  # tablas de la API JWT (usuarios, refresh tokens, experimentos)
 
     configure_logger(controller_log)
 
@@ -119,6 +121,7 @@ async def lifespan(app: FastAPI):
 
 # Initialize FastAPI app outside the Controller class
 app = FastAPI(lifespan=lifespan)
+include_api(app)  # /public, /auth, /users, /experiments
 
 
 # Define endpoints outside the Controller class
