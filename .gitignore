@@ -178,3 +178,8 @@ nebula/frontend/smac_api.py
 nebula/physical/api.py
 tests/test_api*.py
 **/*api*.py
+
+# Excluidos a petición: postman + informe workshop5 (se conservan en disco)
+NEBULA-Sesion.postman_collection.json
+NEBULA-Sesion.postman_environment.json
+informe_workshop5.tex
