@@ -165,6 +165,13 @@ apikey
 # Excluir documentación markdown del repo destino
 *.md
 
+# Excepción: fuentes mínimas para que MkDocs/CI construya (nav de docs/mkdocs.yml)
+!docs/_prebuilt/index.md
+!docs/_prebuilt/installation.md
+!docs/_prebuilt/userguide.md
+!docs/_prebuilt/developerguide.md
+!docs/_prebuilt/smac.md
+
 # Excluir todo lo que sea API del repo destino
 nebula/controller/api/
 nebula/frontend/smac_api.py

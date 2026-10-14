@@ -14,11 +14,7 @@ nav:
   - User Guide: userguide.md
   - Developer Guide: developerguide.md
   - Cognitive Agents (SMAC): smac.md
-  - Git Workflow: git-workflow.md
   - API Reference: api/
-  - Contributing: contributing.md
-  - Changelog: changelog.md
-  - Commercial FAQ: commercial-faq.md
 plugins:
   - search
   - mkdocstrings:
@@ -99,7 +95,9 @@ markdown_extensions:
       generic: true
   - pymdownx.magiclink
   - pymdownx.details # Allowing hidden expandable regions denoted by ???
-  - pymdownx.highlight
+  # pymdownx.highlight removido: incompatible con pymdown-extensions>=10.2
+  # (mkdocstrings intentaba Highlight() sin arg 'md' -> TypeError). Material
+  # ya resalta via superfences/inlinehilite.
   - pymdownx.inlinehilite
   - pymdownx.superfences # Seems to enable syntax highlighting when used with the Material theme.
   - pymdownx.tasklist:
