@@ -256,6 +256,13 @@ async def main(config: Config):
         trainer=trainer,
         security=False,
     )
+    # Sprint 6: warm start desde checkpoint del escenario padre (solo si el
+    # participant trae scenario_args.resume_from). Checkpoint inválido o
+    # incompatible → ValueError: el nodo no arranca en silencio.
+    if (config.participant.get("scenario_args") or {}).get("resume_from"):
+        from nebula.core.checkpoint import apply_resume
+
+        node.resume_info = apply_resume(node, config)
     await node.start_communications()
     await node.deploy_components()
     await node.deploy_federation()

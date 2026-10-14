@@ -1,15 +1,24 @@
 import asyncio
 import platform
+import sys
 
 import psutil
-from pynvml import (
-    nvmlDeviceGetCount,
-    nvmlDeviceGetHandleByIndex,
-    nvmlDeviceGetMemoryInfo,
-    nvmlDeviceGetUtilizationRates,
-    nvmlInit,
-    nvmlShutdown,
-)
+
+try:
+    from pynvml import (
+        nvmlDeviceGetCount,
+        nvmlDeviceGetHandleByIndex,
+        nvmlDeviceGetMemoryInfo,
+        nvmlDeviceGetUtilizationRates,
+        nvmlInit,
+        nvmlShutdown,
+    )
+
+    _PYNVML_AVAILABLE = True
+except Exception:
+    # Sprint 1: sin pynvml (CI/CPU-only) la GPU queda no disponible; el resto
+    # del monitor (CPU/RAM/temp) sigue funcionando.
+    _PYNVML_AVAILABLE = False
 
 from nebula.core.utils.locker import Locker
 
@@ -36,8 +45,11 @@ class SystemMonitor:
         if not hasattr(self, "_initialized"):  # To avoid reinitialization on subsequent calls
             # Try to initialize NVIDIA library if available
             try:
-                nvmlInit()
-                self.gpu_available = True  # Flag to check if GPU is available
+                if _PYNVML_AVAILABLE:
+                    nvmlInit()
+                    self.gpu_available = True  # Flag to check if GPU is available
+                else:
+                    self.gpu_available = False
             except Exception:
                 self.gpu_available = False  # If not, set GPU availability to False
             self._initialized = True
@@ -54,6 +66,36 @@ class SystemMonitor:
         """Returns the percentage of used RAM memory."""
         memory_info = psutil.virtual_memory()
         return memory_info.percent
+
+    async def get_temperature(self) -> float | None:
+        """Returns CPU temperature in °C, or None if no sensor is available.
+
+        Sprint 1 (ROADMAP_AGENTE_ADAPTATIVO): real sensor reading via
+        ``psutil.sensors_temperatures()`` trying ``CPU_SENSOR_NAMES`` on Linux.
+        Returns ``None`` (never an invented value) on Docker/Windows or when
+        no sensor exists; callers must label ARX fallbacks as ``estimated``
+        and missing data as ``unavailable``.
+        """
+        try:
+            if sys.platform != "linux":
+                return None
+            sensors = await asyncio.to_thread(psutil.sensors_temperatures)
+            if not sensors:
+                return None
+            try:
+                from nebula.config.defaults import CPU_SENSOR_NAMES
+            except Exception:
+                CPU_SENSOR_NAMES = ("coretemp", "k10temp", "cpu_thermal")
+            for name in CPU_SENSOR_NAMES:
+                entries = (sensors or {}).get(name)
+                if entries:
+                    try:
+                        return float(entries[0].current)
+                    except (TypeError, ValueError, IndexError):
+                        continue
+            return None
+        except Exception:
+            return None
 
     async def get_swap_memory_usage(self):
         """Returns the percentage of used swap memory."""
@@ -129,7 +171,7 @@ class SystemMonitor:
 
     async def get_gpu_usage(self):
         """Returns GPU usage stats if available, otherwise returns None."""
-        if not self.gpu_available:
+        if not self.gpu_available or not _PYNVML_AVAILABLE:
             return None  # No GPU available, return None
 
         # If GPU is available, get the usage using pynvml
@@ -154,6 +196,7 @@ class SystemMonitor:
             "cpu_per_core_usage": await self.get_cpu_per_core_usage(),
             "memory_usage": await self.get_memory_usage(),
             "swap_memory_usage": await self.get_swap_memory_usage(),
+            "cpu_temperature": await self.get_temperature(),
             "network_usage": await self.get_network_usage(),
             "gpu_usage": await self.get_gpu_usage(),  # Includes GPU usage or None if no GPU
         }
@@ -161,5 +204,5 @@ class SystemMonitor:
 
     async def close(self):
         """Closes the initialization of the NVIDIA library (if used)."""
-        if self.gpu_available:
+        if self.gpu_available and _PYNVML_AVAILABLE:
             nvmlShutdown()

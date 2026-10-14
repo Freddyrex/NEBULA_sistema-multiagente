@@ -29,7 +29,7 @@ class Settings:
         controller_host (str): Hostname or IP address of the Nebula controller service.
         controller_port (int): Port on which the Nebula controller listens (default: 5050).
         resources_threshold (float): Threshold for resource usage alerts (default: 0.0).
-        port (int): Port for the Nebula frontend service (default: 6060).
+        port (int): Port for the Nebula frontend service (default: 8080).
         production (bool): Whether the application is running in production mode.
         advanced_analytics (bool): Whether advanced analytics features are enabled.
         host_platform (str): Underlying host operating platform (e.g., 'unix').
@@ -48,7 +48,7 @@ class Settings:
     controller_host: str = os.environ.get("NEBULA_CONTROLLER_HOST")
     controller_port: int = os.environ.get("NEBULA_CONTROLLER_PORT", 5050)
     resources_threshold: float = 0.0
-    port: int = os.environ.get("NEBULA_FRONTEND_PORT", 6060)
+    port: int = os.environ.get("NEBULA_FRONTEND_PORT", 8080)
     production: bool = os.environ.get("NEBULA_PRODUCTION", "False") == "True"
     advanced_analytics: bool = os.environ.get("NEBULA_ADVANCED_ANALYTICS", "False") == "True"
     host_platform: str = os.environ.get("NEBULA_HOST_PLATFORM", "unix")
@@ -58,7 +58,7 @@ class Settings:
     root_host_path: str = os.environ.get("NEBULA_ROOT_HOST")
     config_frontend_dir: str = os.environ.get("NEBULA_CONFIG_FRONTEND_DIR", "config")
     env_file: str = os.environ.get("NEBULA_ENV_PATH", ".env")
-    statistics_port: int = os.environ.get("NEBULA_STATISTICS_PORT", 8080)
+    statistics_port: int = os.environ.get("NEBULA_STATISTICS_PORT", 8081)
     PERMANENT_SESSION_LIFETIME: datetime.timedelta = datetime.timedelta(minutes=60)
     templates_dir: str = "templates"
     frontend_log: str = os.environ.get("NEBULA_FRONTEND_LOG", "/nebula/app/logs/frontend.log")
@@ -112,6 +112,18 @@ from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
+from nebula.config.defaults import (
+    RETRY_BASE_S,
+    RETRY_FACTOR,
+    RETRY_JITTER,
+    RETRY_MAX,
+    RETRY_MAX_DELAY_S,
+    SERIES_DEFAULT_POINTS,
+    SMAC_CHAT_MODEL,
+    SMAC_MAX_TOKENS,
+    SMAC_REASONING_EFFORT,
+    SMAC_TIMEOUT_S,
+)
 from nebula.utils import FileUtils
 
 logging.info(f"🚀  Starting Nebula Frontend on port {settings.port}")
@@ -119,23 +131,32 @@ logging.info(f"🚀  Starting Nebula Frontend on port {settings.port}")
 logging.info(f"NEBULA_PRODUCTION: {settings.production}")
 
 if "SECRET_KEY" not in os.environ:
+    if settings.production:
+        raise RuntimeError(
+            "SECRET_KEY must be set explicitly when NEBULA_PRODUCTION=True "
+            "(generate with: python -c 'import secrets; print(secrets.token_hex(32))')"
+        )
     logging.info("Generating SECRET_KEY")
-    os.environ["SECRET_KEY"] = os.urandom(24).hex()
+    import secrets as _secrets
+
+    os.environ["SECRET_KEY"] = _secrets.token_hex(32)
     logging.info(f"Saving SECRET_KEY to {settings.env_file}")
     with open(settings.env_file, "a") as f:
         f.write(f"SECRET_KEY={os.environ['SECRET_KEY']}\n")
 else:
     logging.info("SECRET_KEY already set")
 
+_cors_origins = [o.strip() for o in os.environ.get("NEBULA_CORS_ORIGINS", "").split(",") if o.strip()]
+
 app = FastAPI()
 app.add_middleware(
     SessionMiddleware,
     secret_key=os.environ.get("SECRET_KEY"),
-    session_cookie=f"session_{os.environ.get('NEBULA_FRONTEND_PORT')}",
+    session_cookie=os.environ.get("NEBULA_SESSION_COOKIE", f"session_{settings.port}"),
 )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -264,6 +285,37 @@ async def websocket_endpoint(websocket: WebSocket, client_id: int):
 
 templates = Jinja2Templates(directory=settings.templates_dir)
 
+# Config inyectada a window.NebulaConfig + versión de estáticos (?v=): una sola
+# fuente (env NEBULA_*), sin fechas literales en los templates.
+from nebula.config import defaults as _frontend_defaults
+
+templates.env.globals.update(
+    static_v=_frontend_defaults.STATIC_VERSION,
+    nebula_config={
+        "pollMs": _frontend_defaults.FRONTEND_POLL_MS,
+        "copyResetMs": _frontend_defaults.COPY_RESET_MS,
+        "histMaxMsg": _frontend_defaults.HIST_MAX_MSG,
+        "histMaxSc": _frontend_defaults.HIST_MAX_SC,
+        "histMaxLen": _frontend_defaults.HIST_MAX_LEN,
+        "sseMaxWaitS": _frontend_defaults.SSE_MAX_WAIT_S,
+        "ssePollS": _frontend_defaults.SSE_POLL_S,
+        "breakpointDock": _frontend_defaults.BREAKPOINT_DOCK,
+        "chipsMax": _frontend_defaults.CHAT_CHIPS_MAX,
+        "chatReadyResetMs": _frontend_defaults.CHAT_READY_RESET_MS,
+        "monitorPollMs": _frontend_defaults.MONITOR_POLL_MS,
+        "monitorQueueMs": _frontend_defaults.MONITOR_QUEUE_MS,
+        "monitorStaleBaseMs": _frontend_defaults.MONITOR_STALE_BASE_MS,
+        "monitorStalePerNodeMs": _frontend_defaults.MONITOR_STALE_PER_NODE_MS,
+        "topoHeightPx": _frontend_defaults.TOPO_HEIGHT_PX,
+        "firebase": {
+            "apiKey": _frontend_defaults.FIREBASE_API_KEY,
+            "authDomain": _frontend_defaults.FIREBASE_AUTH_DOMAIN,
+            "projectId": _frontend_defaults.FIREBASE_PROJECT_ID,
+        },
+        "gtagId": _frontend_defaults.GTAG_ID,
+    },
+)
+
 
 def datetimeformat(value, format="%B %d, %Y %H:%M"):
     """
@@ -389,9 +441,14 @@ async def custom_http_exception_handler(request: Request, exc: StarletteHTTPExce
     return JSONResponse({"detail": exc.detail, "status_code": exc.status_code}, status_code=exc.status_code)
 
 
-async def retry_with_backoff(func, *args, max_retries=5, initial_delay=1):
+async def retry_with_backoff(
+    func, *args, max_retries=RETRY_MAX, initial_delay=RETRY_BASE_S
+):
     """
-    Retry a function with exponential backoff.
+    Retry a function with exponential backoff + jitter.
+
+    Retries connection errors, timeouts and 429/503 statuses. Delays are
+    capped at RETRY_MAX_DELAY_S to avoid hanging requests.
 
     Args:
         func: The async function to retry
@@ -405,18 +462,27 @@ async def retry_with_backoff(func, *args, max_retries=5, initial_delay=1):
     Raises:
         The last exception if all retries fail
     """
+    import random as _random
+
     delay = initial_delay
     last_exception = None
 
     for attempt in range(max_retries):
         try:
             return await func(*args)
-        except (ClientConnectorError, ClientError) as e:
+        except (ClientConnectorError, ClientError, TimeoutError) as e:
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            if isinstance(e, ClientError) and status not in (None, 429, 503):
+                raise
             last_exception = e
             if attempt < max_retries - 1:
-                logging.warning(f"Connection attempt {attempt + 1} failed: {str(e)}. Retrying in {delay} seconds...")
-                await asyncio.sleep(delay)
-                delay *= 2  # Exponential backoff
+                wait = min(delay, RETRY_MAX_DELAY_S)
+                wait += _random.uniform(0, RETRY_JITTER * wait)
+                logging.warning(
+                    f"Connection attempt {attempt + 1} failed: {str(e)}. Retrying in {wait:.1f} seconds..."
+                )
+                await asyncio.sleep(wait)
+                delay = min(delay * RETRY_FACTOR, RETRY_MAX_DELAY_S)
             else:
                 logging.error(f"All {max_retries} connection attempts failed")
                 raise last_exception
@@ -1525,7 +1591,7 @@ async def wait_for_enough_ram():
         if actual_ram <= desired_ram:
             break
 
-        await asyncio.sleep(1)
+        await asyncio.sleep(_frontend_defaults.RAM_POLL_S)  # §7: espera RAM con nombre
 
 
 async def monitor_resources():
@@ -1564,10 +1630,10 @@ async def monitor_resources():
 
         except Exception as e:
             print(f"[monitor_resources] Error while checking resources or handling scenario: {e}")
-            await asyncio.sleep(5)
+            await asyncio.sleep(_frontend_defaults.MONITOR_ERROR_S)  # §7
             continue
 
-        await asyncio.sleep(20)
+        await asyncio.sleep(_frontend_defaults.MONITOR_INTERVAL_S)  # §7
 
 
 try:
@@ -2061,7 +2127,8 @@ async def statistics_proxy(request: Request, path: str = None, session: dict = D
     if "user" in session:
         query_string = urlencode(request.query_params)
 
-        url = "http://localhost:8080"
+        tb_host = os.environ.get("NEBULA_TENSORBOARD_HOST", "127.0.0.1")
+        url = f"http://{tb_host}:{settings.statistics_port}"
         tensorboard_url = f"{url}{('/' + path) if path else ''}" + ("?" + query_string if query_string else "")
 
         headers = {key: value for key, value in request.headers.items() if key.lower() != "host"}
@@ -2145,6 +2212,8 @@ def _smac_deps():
     databases_dir = os.path.join(os.path.dirname((config_dir or "").rstrip("/")), "databases")
     if not os.path.isdir(databases_dir):
         databases_dir = None
+    from nebula.frontend.smac_chat import resolve_groq_key
+
     return SmacDeps(
         config_dir=config_dir,
         log_dir=settings.log_dir,
@@ -2152,11 +2221,11 @@ def _smac_deps():
         controller_host=settings.controller_host,
         controller_port=settings.controller_port,
         controller_name=os.environ.get("NEBULA_CONTROLLER_NAME", ""),
-        api_key=os.environ.get("GROQ_API_KEY", ""),
-        chat_model=os.environ.get("SMAC_CHAT_MODEL", "openai/gpt-oss-120b"),
-        chat_effort=os.environ.get("SMAC_CHAT_REASONING_EFFORT", "medium"),
-        timeout_s=float(os.environ.get("SMAC_TIMEOUT_S", "30")),
-        max_tokens=int(os.environ.get("SMAC_CHAT_MAX_TOKENS", "4096")),
+        api_key=resolve_groq_key(os.environ.get("GROQ_API_KEY", "")),
+        chat_model=os.environ.get("SMAC_CHAT_MODEL", SMAC_CHAT_MODEL),
+        chat_effort=os.environ.get("SMAC_CHAT_REASONING_EFFORT", SMAC_REASONING_EFFORT),
+        timeout_s=float(os.environ.get("SMAC_TIMEOUT_S", str(SMAC_TIMEOUT_S))),
+        max_tokens=int(os.environ.get("SMAC_CHAT_MAX_TOKENS", str(SMAC_MAX_TOKENS))),
     )
 
 
@@ -2242,6 +2311,31 @@ async def smac_chat_confirm(request: Request, session: dict = Depends(get_sessio
         raise HTTPException(status_code=403, detail=payload.get("detail", "Forbidden"))
     if status_code == 404:
         raise HTTPException(status_code=404, detail=payload.get("detail", "Not found"))
+    return payload
+
+
+@app.post("/platform/smac/resume")
+async def smac_resume(request: Request, session: dict = Depends(get_session)):
+    """
+    Manual resume override while the scenario is auto-paused for suggestions.
+
+    Body (JSON): {"scenario": str}. Only resumes pauses issued by the agent
+    itself (manual pauses are never touched). Operator/admin only.
+    """
+    from nebula.frontend.smac_api import handle_resume
+
+    if "user" not in session:
+        raise HTTPException(status_code=401)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    body = body or {}
+    status_code, payload = await handle_resume(_smac_deps(), session, (body.get("scenario") or "").strip())
+    if status_code == 403:
+        raise HTTPException(status_code=403, detail=payload.get("error", "Forbidden"))
+    if status_code == 400:
+        raise HTTPException(status_code=400, detail=payload.get("error", "Bad request"))
     return payload
 
 
@@ -2397,7 +2491,8 @@ def _metrics_service():
     databases_dir = os.path.join(os.path.dirname((config_dir or "").rstrip("/")), "databases")
     if not os.path.isdir(databases_dir):
         databases_dir = None
-    return MetricsService(log_dir=settings.log_dir, databases_dir=databases_dir)
+    return MetricsService(log_dir=settings.log_dir, databases_dir=databases_dir,
+                          config_dir=config_dir)
 
 
 async def _require_scenario_access(session: dict, scenario_id: str):
@@ -2427,8 +2522,16 @@ async def metrics_scenario_summary(scenario_id: str, session: dict = Depends(get
     """Digest precomputado del escenario (meta + métricas + nodos + eventos)."""
     await _require_scenario_access(session, scenario_id)
     svc = _metrics_service()
+    # Sprint 2: hallazgos del exec-interpreter tras la bandera
+    # `adaptive_agent.exec_interpreter` de scenario.json (apagado por defecto).
     try:
-        payload, info = svc.summary(scenario_id)
+        from nebula.frontend.exec_interpreter import interpreter_enabled
+
+        flag = interpreter_enabled(settings.config_dir, scenario_id)
+    except Exception:
+        flag = False
+    try:
+        payload, info = svc.summary(scenario_id, findings_enabled=flag)
     except LookupError:
         raise HTTPException(status_code=404, detail="Scenario not found")
     return JSONResponse(
@@ -2444,10 +2547,11 @@ async def metrics_scenario_series(
     node_ids: str | None = None,
     round_from: int | None = None,
     round_to: int | None = None,
-    max_points: int = 500,
+    max_points: int = SERIES_DEFAULT_POINTS,
     session: dict = Depends(get_session),
 ):
     """Serie canónica por ronda (+ media global con scope=global)."""
+    from nebula.config.defaults import SERIES_HARD_CAP
     from nebula.frontend.metrics import METRIC_META
 
     await _require_scenario_access(session, scenario_id)
@@ -2458,11 +2562,12 @@ async def metrics_scenario_series(
             ids = [int(x) for x in node_ids.split(",") if x.strip() != ""]
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid node_ids")
+    capped = max_points != max(1, min(max_points, SERIES_HARD_CAP))
     try:
         rows, info = svc.series(
             scenario_id, metric,
             node_ids=ids, round_from=round_from, round_to=round_to,
-            max_points=max(1, min(max_points, 2000)),
+            max_points=max(1, min(max_points, SERIES_HARD_CAP)),
         )
     except KeyError:
         raise HTTPException(
@@ -2472,7 +2577,7 @@ async def metrics_scenario_series(
                     "available_metrics": svc.available_metrics(scenario_id)},
         )
     return {"metric": metric, "meta": METRIC_META[metric], "points": info["points"],
-            "warnings": info["warnings"], "series": rows}
+            "warnings": info["warnings"], "series": rows, "truncated": capped}
 
 
 @app.get("/platform/api/scenarios/{scenario_id}/events")
@@ -2653,10 +2758,11 @@ async def run_scenario(scenario_data: dict, role: str, user: str) -> None:
             elapsed = int(asyncio.get_event_loop().time() - wait_start)
             mins, secs = divmod(elapsed, 60)
             logging.info(
-                f"[{scenario_data.get('scenario_title', 'Unnamed')}] "
-                f"Raspberry nodes busy – waited {mins:02d}:{secs:02d}; retrying in 10 s…"
-            )
-            await asyncio.sleep(10)
+            f"[{scenario_data.get('scenario_title', 'Unnamed')}] "
+            f"Raspberry nodes busy – waited {mins:02d}:{secs:02d}; "
+            f"retrying in {_frontend_defaults.PHYSICAL_BUSY_S:g} s…"
+        )
+            await asyncio.sleep(_frontend_defaults.PHYSICAL_BUSY_S)  # §7
 
     # Reserve CPU/GPU based on availability and role
     scenario_data = await assign_available_gpu(scenario_data, role)
@@ -2694,18 +2800,18 @@ async def run_scenarios(role, user):
             await run_scenario(scenario_data, role, user)
             # Waits till the scenario is completed
             while not user_data.finish_scenario_event.is_set() and not user_data.stop_all_scenarios_event.is_set():
-                await asyncio.sleep(1)
+                await asyncio.sleep(_frontend_defaults.FINISH_POLL_S)  # §7
 
             # Wait until theres enough resources to launch the next scenario
             while not await check_enough_resources():
-                await asyncio.sleep(1)
+                await asyncio.sleep(_frontend_defaults.RESOURCE_POLL_S)  # §7
 
             if user_data.stop_all_scenarios_event.is_set():
                 user_data.stop_all_scenarios_event.clear()
                 user_data.scenarios_list_length = 0
                 return
             user_data.scenarios_finished += 1
-            await asyncio.sleep(5)
+            await asyncio.sleep(_frontend_defaults.CONTROLLER_RETRY_S)  # §7
     finally:
         user_data.scenarios_list_length = 0
 
@@ -2753,7 +2859,7 @@ async def nebula_dashboard_deployment_run(
     else:
         user_data.scenarios_list_length += len(data)
         user_data.scenarios_list.extend(data)
-        await asyncio.sleep(3)
+        await asyncio.sleep(_frontend_defaults.PHYSICAL_FINISH_S)  # §7
     logging.info(
         f"Running deployment with {len(data)} scenarios_list_length: {user_data.scenarios_list_length} scenarios"
     )
@@ -2764,7 +2870,7 @@ async def nebula_dashboard_deployment_run(
 if __name__ == "__main__":
     # Parse args from command line
     parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, default=6060, help="Port to run the frontend on.")
+    parser.add_argument("--port", type=int, default=8080, help="Port to run the frontend on.")
     args = parser.parse_args()
     logging.info(f"Starting frontend on port {args.port}")
     import uvicorn

@@ -3,6 +3,13 @@ class Monitor {
     constructor() {
         // Debug flag to control logging
         this.debug = true;
+        // §5.1/§5.5: fuente única NebulaApi/NebulaConfig (inyectada por backend).
+        this.CFG = (window.NebulaConfig || {});
+        this.API = (window.NebulaApi || {});
+        this.MONITOR_POLL_MS = this.CFG.monitorPollMs || 5000;
+        this.MONITOR_QUEUE_MS = this.CFG.monitorQueueMs || 100;
+        this.MONITOR_STALE_BASE_MS = this.CFG.monitorStaleBaseMs || 20000;
+        this.MONITOR_STALE_PER_NODE_MS = this.CFG.monitorStalePerNodeMs || 500;
 
         // Get scenario name from URL path
         const pathParts = window.location.pathname.split('/');
@@ -117,14 +124,14 @@ class Monitor {
         // Initialize drone icons
         this.log('Initializing drone icons...');
         this.droneIcon = L.icon({
-            iconUrl: '/platform/static/images/drone.svg',
+            iconUrl: ((window.NebulaApi && window.NebulaApi.staticImage ? window.NebulaApi.staticImage('drone.svg') : '/platform/static/images/drone.svg')),
             iconSize: [28, 28],
             iconAnchor: [19, 19],
             popupAnchor: [0, -19]
         });
 
         this.droneIconOffline = L.icon({
-            iconUrl: '/platform/static/images/drone_offline.svg',
+            iconUrl: ((window.NebulaApi && window.NebulaApi.staticImage ? window.NebulaApi.staticImage('drone_offline.svg') : '/platform/static/images/drone_offline.svg')),
             iconSize: [28, 28],
             iconAnchor: [19, 19],
             popupAnchor: [0, -19]
@@ -228,7 +235,7 @@ class Monitor {
         // Create and store the promise
         this.initialDataPromise = new Promise((resolve, reject) => {
             this.log('Loading initial data for scenario:', this.scenarioName);
-            fetch(`/platform/api/dashboard/${this.scenarioName}/monitor`)
+            (this.API.dashboardMonitor ? fetch(this.API.dashboardMonitor(this.scenarioName)) : fetch(`/platform/api/dashboard/${this.scenarioName}/monitor`))
                 .then(response => {
                     if (!response.ok) {
                         throw new Error(`HTTP error! status: ${response.status}`);
@@ -831,7 +838,7 @@ class Monitor {
             if (actionsCell) {
                 const metricsLink = data.hash ? `
                     <li>
-                        <a class="dropdown-item" href="/platform/dashboard/${this.scenarioName}/node/${data.hash}/metrics">
+                        <a class="dropdown-item" href="${(this.API.nodeMetrics ? this.API.nodeMetrics(this.scenarioName, data.hash) : ('/platform/dashboard/' + this.scenarioName + '/node/' + data.hash + '/metrics'))}">
                             <i class="fa fa-chart-bar me-2"></i>Real-time metrics
                         </a>
                     </li>
@@ -846,17 +853,17 @@ class Monitor {
                         <ul class="dropdown-menu dropdown-menu-end">
                             ${metricsLink}
                             <li>
-                                <a class="dropdown-item download" href="/platform/dashboard/${this.scenarioName}/node/${data.idx}/infolog">
+                                <a class="dropdown-item download" href="${(this.API.nodeLog ? this.API.nodeLog(this.scenarioName, data.idx, "infolog") : ('/platform/dashboard/' + this.scenarioName + '/node/' + data.idx + '/infolog'))}">
                                     <i class="fa fa-file-alt me-2"></i>Download INFO logs
                                 </a>
                             </li>
                             <li>
-                                <a class="dropdown-item download" href="/platform/dashboard/${this.scenarioName}/node/${data.idx}/debuglog">
+                                <a class="dropdown-item download" href="${(this.API.nodeLog ? this.API.nodeLog(this.scenarioName, data.idx, "debuglog") : ('/platform/dashboard/' + this.scenarioName + '/node/' + data.idx + '/debuglog'))}">
                                     <i class="fa fa-bug me-2"></i>Download DEBUG logs
                                 </a>
                             </li>
                             <li>
-                                <a class="dropdown-item download" href="/platform/dashboard/${this.scenarioName}/node/${data.idx}/errorlog">
+                                <a class="dropdown-item download" href="${(this.API.nodeLog ? this.API.nodeLog(this.scenarioName, data.idx, "errorlog") : ('/platform/dashboard/' + this.scenarioName + '/node/' + data.idx + '/errorlog'))}">
                                     <i class="fa fa-exclamation-triangle me-2"></i>Download ERROR logs
                                 </a>
                             </li>
@@ -982,11 +989,11 @@ class Monitor {
             } finally {
                 this.pendingGraphUpdate = false;
             }
-        }, 100); // 100ms debounce
+        }, this.MONITOR_QUEUE_MS); // debounce (NebulaConfig.monitorQueueMs)
     }
 
     initializeEventListeners() {
-        setInterval(() => this.processQueue(), 100);
+        setInterval(() => this.processQueue(), this.MONITOR_QUEUE_MS);
     }
 
     initializeDownloadHandlers() {
@@ -1338,7 +1345,7 @@ class Monitor {
         // Check for stale nodes every 5 seconds
         setInterval(() => {
             const numberOfNodes = this.gData.nodes.length;
-            const staleThreshold = 20000 + (numberOfNodes * 500);
+            const staleThreshold = this.MONITOR_STALE_BASE_MS + (numberOfNodes * this.MONITOR_STALE_PER_NODE_MS);
 
             const currentTime = Date.now();
 
@@ -1350,7 +1357,7 @@ class Monitor {
                     this.markNodeAsOffline(nodeId);
                 }
             });
-        }, 5000); // Check every 5 seconds
+        }, this.MONITOR_POLL_MS); // NebulaConfig.monitorPollMs
     }
 
     markNodeAsOffline(nodeId) {
@@ -1369,7 +1376,7 @@ class Monitor {
         // Update node color in graph data
         const nodeIndex = this.gData.nodes.findIndex(n => n.ipport === nodeId);
         if (nodeIndex !== -1) {
-            this.gData.nodes[nodeIndex].color = '#ff0000'; // Red color for offline nodes
+            this.gData.nodes[nodeIndex].color = (getComputedStyle(document.documentElement).getPropertyValue('--nb-danger') || '#ff0000').trim() || '#ff0000'; // token --nb-danger (§5.3)
         }
 
         // Remove all links involving this node
@@ -1419,7 +1426,7 @@ class Monitor {
     startPeriodicStatusCheck() {
         this.log("Starting periodic status check");
         this.checkNodeStatus();
-        setInterval(() => this.checkNodeStatus(), 5000);
+        setInterval(() => this.checkNodeStatus(), this.MONITOR_POLL_MS);
     }
 
     async checkNodeStatus() {
@@ -1436,7 +1443,7 @@ class Monitor {
                 await this.initialDataPromise;
             }
 
-            const response = await fetch(`/platform/api/dashboard/${this.scenarioName}/monitor`);
+            const response = await (this.API.dashboardMonitor ? fetch(this.API.dashboardMonitor(this.scenarioName)) : fetch(`/platform/api/dashboard/${this.scenarioName}/monitor`));
             if (!response.ok) {
                 this.error('Failed to fetch node status');
                 return;
@@ -1615,23 +1622,23 @@ class Monitor {
                         <ul class="dropdown-menu dropdown-menu-end">
                             ${data.hash ? `
                                 <li>
-                                    <a class="dropdown-item" href="/platform/dashboard/${this.scenarioName}/node/${data.hash}/metrics">
+                                    <a class="dropdown-item" href="${(this.API.nodeMetrics ? this.API.nodeMetrics(this.scenarioName, data.hash) : ('/platform/dashboard/' + this.scenarioName + '/node/' + data.hash + '/metrics'))}">
                                         <i class="fa fa-chart-bar me-2"></i>Real-time metrics
                                     </a>
                                 </li>
                             ` : ''}
                             <li>
-                                <a class="dropdown-item download" href="/platform/dashboard/${this.scenarioName}/node/${data.idx}/infolog">
+                                <a class="dropdown-item download" href="${(this.API.nodeLog ? this.API.nodeLog(this.scenarioName, data.idx, "infolog") : ('/platform/dashboard/' + this.scenarioName + '/node/' + data.idx + '/infolog'))}">
                                     <i class="fa fa-file-alt me-2"></i>Download INFO logs
                                 </a>
                             </li>
                             <li>
-                                <a class="dropdown-item download" href="/platform/dashboard/${this.scenarioName}/node/${data.idx}/debuglog">
+                                <a class="dropdown-item download" href="${(this.API.nodeLog ? this.API.nodeLog(this.scenarioName, data.idx, "debuglog") : ('/platform/dashboard/' + this.scenarioName + '/node/' + data.idx + '/debuglog'))}">
                                     <i class="fa fa-bug me-2"></i>Download DEBUG logs
                                 </a>
                             </li>
                             <li>
-                                <a class="dropdown-item download" href="/platform/dashboard/${this.scenarioName}/node/${data.idx}/errorlog">
+                                <a class="dropdown-item download" href="${(this.API.nodeLog ? this.API.nodeLog(this.scenarioName, data.idx, "errorlog") : ('/platform/dashboard/' + this.scenarioName + '/node/' + data.idx + '/errorlog'))}">
                                     <i class="fa fa-exclamation-triangle me-2"></i>Download ERROR logs
                                 </a>
                             </li>
@@ -1705,7 +1712,7 @@ class Monitor {
             if (actionsCell) {
                 const metricsLink = data.hash ? `
                     <li>
-                        <a class="dropdown-item" href="/platform/dashboard/${this.scenarioName}/node/${data.hash}/metrics">
+                        <a class="dropdown-item" href="${(this.API.nodeMetrics ? this.API.nodeMetrics(this.scenarioName, data.hash) : ('/platform/dashboard/' + this.scenarioName + '/node/' + data.hash + '/metrics'))}">
                             <i class="fa fa-chart-bar me-2"></i>Real-time metrics
                         </a>
                     </li>
@@ -1720,17 +1727,17 @@ class Monitor {
                         <ul class="dropdown-menu dropdown-menu-end">
                             ${metricsLink}
                             <li>
-                                <a class="dropdown-item download" href="/platform/dashboard/${this.scenarioName}/node/${data.idx}/infolog">
+                                <a class="dropdown-item download" href="${(this.API.nodeLog ? this.API.nodeLog(this.scenarioName, data.idx, "infolog") : ('/platform/dashboard/' + this.scenarioName + '/node/' + data.idx + '/infolog'))}">
                                     <i class="fa fa-file-alt me-2"></i>Download INFO logs
                                 </a>
                             </li>
                             <li>
-                                <a class="dropdown-item download" href="/platform/dashboard/${this.scenarioName}/node/${data.idx}/debuglog">
+                                <a class="dropdown-item download" href="${(this.API.nodeLog ? this.API.nodeLog(this.scenarioName, data.idx, "debuglog") : ('/platform/dashboard/' + this.scenarioName + '/node/' + data.idx + '/debuglog'))}">
                                     <i class="fa fa-bug me-2"></i>Download DEBUG logs
                                 </a>
                             </li>
                             <li>
-                                <a class="dropdown-item download" href="/platform/dashboard/${this.scenarioName}/node/${data.idx}/errorlog">
+                                <a class="dropdown-item download" href="${(this.API.nodeLog ? this.API.nodeLog(this.scenarioName, data.idx, "errorlog") : ('/platform/dashboard/' + this.scenarioName + '/node/' + data.idx + '/errorlog'))}">
                                     <i class="fa fa-exclamation-triangle me-2"></i>Download ERROR logs
                                 </a>
                             </li>

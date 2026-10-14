@@ -113,7 +113,11 @@ const ScenarioActions = {
 
     async executeRelaunch(scenarioName) {
         try {
-            const response = await fetch(`/platform/dashboard/${scenarioName}/relaunch`, {
+            const API = window.NebulaApi || {};
+            const url = API.dashboardRelaunch
+                ? API.dashboardRelaunch(scenarioName)
+                : `/platform/dashboard/${scenarioName}/relaunch`;
+            const response = await fetch(url, {
                 method: 'GET'
             });
 
@@ -134,7 +138,11 @@ const ScenarioActions = {
 
     async executeRemove(scenarioName) {
         try {
-            const response = await fetch(`/platform/dashboard/${scenarioName}/remove`, {
+            const API = window.NebulaApi || {};
+            const url = API.dashboardRemove
+                ? API.dashboardRemove(scenarioName)
+                : `/platform/dashboard/${scenarioName}/remove`;
+            const response = await fetch(url, {
                 method: 'GET'
             });
 

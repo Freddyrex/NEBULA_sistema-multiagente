@@ -304,7 +304,7 @@
 </script>
 
 <!-- Load dashboard modules -->
-<script type="module" src="{{ url_for('static', path='js/dashboard/dashboard.js') }}?v=20260930"></script>
+<script type="module" src="{{ url_for('static', path='js/dashboard/dashboard.js') }}?v={{ static_v }}"></script>
 
 {% if scenario_running %}
 <div class="notification warning" style="position: fixed; top: 6rem; right: 2rem; z-index: 1000;">

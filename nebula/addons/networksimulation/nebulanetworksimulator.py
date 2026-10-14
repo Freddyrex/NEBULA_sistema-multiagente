@@ -4,20 +4,41 @@ import subprocess
 from functools import cached_property
 
 from nebula.addons.networksimulation.networksimulator import NetworkSimulator
+from nebula.config.defaults import (
+    MULTICAST_IP,
+    NET_COND_PRECISION,
+    NETWORK_DISTANCE_THRESHOLDS,
+    TC_DEFAULTS,
+)
 from nebula.core.eventmanager import EventManager
 from nebula.core.nebulaevents import GPSEvent
 from nebula.core.network.communications import CommunicationsManager
 from nebula.core.utils.locker import Locker
 
 
+def _thresholds_to_map(thresholds) -> dict:
+    """Convierte [{up_to_m, bandwidth, delay}] al mapa {límite: {...}} interno.
+
+    §7: valida y ordena; falla alto ante tramos no crecientes o campos ausentes
+    (nunca fallback silencioso a tabla global).
+    """
+    items = []
+    for t in thresholds or []:
+        try:
+            up_to = float(t["up_to_m"]) if t["up_to_m"] != float("inf") else float("inf")
+            items.append((up_to, {"bandwidth": str(t["bandwidth"]), "delay": str(t["delay"])}))
+        except (KeyError, TypeError, ValueError) as e:
+            raise ValueError(f"network distance_thresholds inválido {t!r}: {e}") from e
+    items.sort(key=lambda kv: kv[0])
+    limits = [k for k, _ in items]
+    if limits != sorted(limits) or len(set(limits)) != len(limits):
+        raise ValueError(f"network distance_thresholds debe ser creciente y único: {thresholds!r}")
+    return dict(items)
+
+
 class NebulaNS(NetworkSimulator):
-    NETWORK_CONDITIONS = {
-        100: {"bandwidth": "5Gbps", "delay": "5ms"},
-        200: {"bandwidth": "2Gbps", "delay": "50ms"},
-        300: {"bandwidth": "100Mbps", "delay": "200ms"},
-        float("inf"): {"bandwidth": "10Mbps", "delay": "100000ms"},
-    }
-    IP_MULTICAST = "239.255.255.250"
+    NETWORK_CONDITIONS = _thresholds_to_map(NETWORK_DISTANCE_THRESHOLDS)
+    IP_MULTICAST = MULTICAST_IP
 
     def __init__(self, changing_interval, interface, verbose=False):
         self._refresh_interval = changing_interval
@@ -36,6 +57,25 @@ class NebulaNS(NetworkSimulator):
         logging.info("🌐  Nebula Network Simulator starting...")
         self._running.set()
         grace_time = self.cm.config.participant["mobility_args"]["grace_time_mobility"]
+        # Overrides por escenario (network_args): tabla de umbrales e IP multicast.
+        # Si no existen, se usan los defaults de nebula.config.defaults.
+        try:
+            network_args = self.cm.config.participant.get("network_args", {}) or {}
+            custom = network_args.get("distance_thresholds")
+            if custom:
+                # §7: validado (falla alto); sin fallback silencioso.
+                self._network_conditions = _thresholds_to_map(custom)
+            multicast = network_args.get("multicast_ip")
+            if multicast:
+                self.IP_MULTICAST = str(multicast)
+            # §7: net_sim desconocido falla alto (no fallback silencioso).
+            backend = str(network_args.get("net_sim", "") or "").strip().lower()
+            if backend and backend not in ("", "tc", "tcset", "none", "nebulanetworksimulator"):
+                raise ValueError(f"net_sim desconocido: {backend!r} (usa 'tc' o 'none')")
+        except ValueError:
+            raise
+        except Exception:
+            logging.exception("🌐  Error leyendo network_args, se usan thresholds por defecto")
         # if self._verbose: logging.info(f"Waiting {grace_time}s to start applying network conditions based on distances between devices")
         # await asyncio.sleep(grace_time)
         await EventManager.get_instance().subscribe_addonevent(
@@ -84,6 +124,9 @@ class NebulaNS(NetworkSimulator):
             logging.exception(f"📍  Connection {addr} not found")
         except Exception:
             logging.exception("📍  Error changing connections based on distance")
+        # §7: el throttle vive en el llamante periódico, no en el handler
+        # (dormir aquí retrasa el bus de eventos GPS). Se mantiene por
+        # compatibilidad pero documentado como debounce, no como tarea.
         await asyncio.sleep(self._refresh_interval)
 
     async def set_thresholds(self, thresholds: dict):
@@ -116,16 +159,16 @@ class NebulaNS(NetworkSimulator):
 
     def _set_network_condition_for_addr(
         self,
-        interface="eth0",
-        network="192.168.50.2",
-        bandwidth="5Gbps",
-        delay="0ms",
-        delay_distro="10ms",
-        delay_distribution="normal",
-        loss="0%",
-        duplicate="0%",
-        corrupt="0%",
-        reordering="0%",
+        interface=TC_DEFAULTS["interface"],
+        network="",
+        bandwidth=TC_DEFAULTS["bandwidth"],
+        delay=TC_DEFAULTS["delay"],
+        delay_distro=TC_DEFAULTS["delay_distro"],
+        delay_distribution=TC_DEFAULTS["delay_distribution"],
+        loss=TC_DEFAULTS["loss"],
+        duplicate=TC_DEFAULTS["duplicate"],
+        corrupt=TC_DEFAULTS["corrupt"],
+        reordering=TC_DEFAULTS["reordering"],
     ):
         if self._verbose:
             logging.info(
@@ -167,17 +210,17 @@ class NebulaNS(NetworkSimulator):
 
     def _set_network_condition_for_multicast(
         self,
-        interface="eth0",
+        interface=TC_DEFAULTS["interface"],
         src_network="",
         dst_network="",
-        bandwidth="5Gbps",
-        delay="0ms",
-        delay_distro="10ms",
-        delay_distribution="normal",
-        loss="0%",
-        duplicate="0%",
-        corrupt="0%",
-        reordering="0%",
+        bandwidth=TC_DEFAULTS["bandwidth"],
+        delay=TC_DEFAULTS["delay"],
+        delay_distro=TC_DEFAULTS["delay_distro"],
+        delay_distribution=TC_DEFAULTS["delay_distribution"],
+        loss=TC_DEFAULTS["loss"],
+        duplicate=TC_DEFAULTS["duplicate"],
+        corrupt=TC_DEFAULTS["corrupt"],
+        reordering=TC_DEFAULTS["reordering"],
     ):
         if self._verbose:
             logging.info(
@@ -276,8 +319,8 @@ class NebulaNS(NetworkSimulator):
                 delay_value = lower_delay_value + progress * (upper_delay_value - lower_delay_value)
 
                 # Reconstruir valores con unidades originales
-                bandwidth = f"{round(bandwidth_value, 2)}{lower_bandwidth_unit}"
-                delay = f"{round(delay_value, 2)}{delay_unit}"
+                bandwidth = f"{round(bandwidth_value, NET_COND_PRECISION)}{lower_bandwidth_unit}"
+                delay = f"{round(delay_value, NET_COND_PRECISION)}{delay_unit}"
 
                 conditions = {"bandwidth": bandwidth, "delay": delay}
 

@@ -1,0 +1,17 @@
+{
+  "title": "SMAC Panel",
+  "subtitle": "cognitive observability & interactive control",
+  "scenario": "Scenario",
+  "load": "Load",
+  "loadFirst": "Load a scenario first.",
+  "sessionExpired": "Session expired. Log in again.",
+  "proposeFailed": "Propose failed",
+  "choosePeer": "Choose a peer first.",
+  "confirmEnable": "Type the scenario name to enable confirm",
+  "confirmRun": "Confirm & run",
+  "discard": "Discard",
+  "requestFailed": "Request failed",
+  "metricStart": "start",
+  "metricBest": "best",
+  "metricCpuFallback": "CPU fallback (no GPU)"
+}

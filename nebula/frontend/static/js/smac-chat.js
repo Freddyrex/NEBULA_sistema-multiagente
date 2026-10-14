@@ -19,6 +19,7 @@
         es: {
             title: "Panel SMAC", subtitle: "observabilidad cognitiva y control interactivo",
             scenario: "Escenario", load: "Cargar", copyId: "Copiar id del escenario", copied: "¡Id copiado!",
+            metricsTitle: "Métricas", goRealtime: "Tiempo real",
             autoOn: "Actualización automática: sí", autoOff: "Actualización automática: no",
             autoOffDone: "Actualización automática: no (el escenario terminó)",
             analyze: "Analizar estado", analyzeResults: "Analizar resultados",
@@ -45,11 +46,24 @@
             emptyNodesSub: "Pulsa Cargar o crea uno desde el Dashboard.",
             loadError: "No se pudo leer el escenario. Reintentar",
             askPh: function (a, b) { return "p. ej. «¿por qué el nodo " + b + " es lento?» o «pausa el nodo " + a + "»"; },
-            statusRunning: "en ejecución", statusCompleted: "✔ completado"
+            statusRunning: "en ejecución", statusCompleted: "✔ completado",
+            loadFirst: "Carga un escenario primero.", sessionExpired: "Sesión expirada. Inicia sesión de nuevo.",
+            proposeFailed: "Propuesta fallida", choosePeer: "Elige un par primero.",
+            confirmEnable: "Escribe el nombre del escenario para confirmar", confirmRun: "Confirmar y ejecutar",
+            discard: "Descartar", requestFailed: "Petición fallida",
+            metricStart: "inicio", metricBest: "mejor", metricCpuFallback: "origen CPU (sin GPU)",
+            findingsTitle: "Hallazgos", noFindings: "sin hallazgos (intérprete apagado o sin datos)",
+            findingsCount: function (n) { return n + " hallazgos"; },
+            suggTitle: "Sugerencias", noSugg: "sin sugerencias",
+            proposeChange: "Proponer cambio", needsConfirm: "requiere tu confirmación",
+            lineageTitle: "Linaje", noLineage: "sin ejecuciones enlazadas",
+            verifTitle: "Verificaciones", noVerif: "sin verificaciones",
+            autoPaused: "Pausado por sugerencia pendiente", resume: "Reanudar"
         },
         en: {
             title: "SMAC Panel", subtitle: "cognitive observability & interactive control",
             scenario: "Scenario", load: "Load", copyId: "Copy scenario id", copied: "Id copied!",
+            metricsTitle: "Metrics", goRealtime: "Real-time",
             autoOn: "Auto refresh: on", autoOff: "Auto refresh: off",
             autoOffDone: "Auto refresh: off (scenario finished)",
             analyze: "Analyze state", analyzeResults: "Analyze results",
@@ -76,7 +90,19 @@
             emptyNodesSub: "Press Load or create one from the Dashboard.",
             loadError: "Could not read the scenario. Retry",
             askPh: function (a, b) { return "e.g. \"why is node " + b + " slow?\" or \"pause node " + a + "\""; },
-            statusRunning: "running", statusCompleted: "✔ completed"
+            statusRunning: "running", statusCompleted: "✔ completed",
+            loadFirst: "Load a scenario first.", sessionExpired: "Session expired. Log in again.",
+            proposeFailed: "Propose failed", choosePeer: "Choose a peer first.",
+            confirmEnable: "Type the scenario name to enable confirm", confirmRun: "Confirm & run",
+            discard: "Discard", requestFailed: "Request failed",
+            metricStart: "start", metricBest: "best", metricCpuFallback: "CPU fallback (no GPU)",
+            findingsTitle: "Findings", noFindings: "no findings (interpreter off or no data)",
+            findingsCount: function (n) { return n + " findings"; },
+            suggTitle: "Suggestions", noSugg: "no suggestions",
+            proposeChange: "Propose change", needsConfirm: "requires your confirmation",
+            lineageTitle: "Lineage", noLineage: "no linked executions",
+            verifTitle: "Verifications", noVerif: "no verifications",
+            autoPaused: "Paused for pending suggestion", resume: "Resume"
         }
     };
     let lang = "en";
@@ -100,6 +126,10 @@
         if (state) render();
     }
 
+    const API = window.NebulaApi;
+    const CFG = window.NebulaConfig || {};
+    const POLL_MS = CFG.pollMs || 5000;
+    const COPY_RESET_MS = CFG.copyResetMs || 1200;
     const NS = "http://www.w3.org/2000/svg";
     let state = null;
     let selected = null;
@@ -108,7 +138,19 @@
 
     /* Colores de estado = tokens --nb-* (§2.3). `finished` es un mapeo de
        visualización: escenario completed + nodo stopped/offline. */
-    const STATE_COLORS = { running: "#2E9E6B", paused: "#D99A1B", finished: "#3E7CB1", offline: "#7C8199", stopped: "#7C8199" };
+    function _cssTok(name, fallback) {
+        try {
+            const v = getComputedStyle(document.documentElement).getPropertyValue(name);
+            return (v && v.trim()) || fallback;
+        } catch (e) { return fallback; }
+    }
+    const STATE_COLORS = {
+        running: _cssTok("--nb-ok", "#2E9E6B"),
+        paused: _cssTok("--nb-warn", "#D99A1B"),
+        finished: _cssTok("--nb-info", "#3E7CB1"),
+        offline: _cssTok("--nb-muted", "#7C8199"),
+        stopped: _cssTok("--nb-muted", "#7C8199"),
+    };
 
     function displayState(n) {
         const sc = ((state && state.status) || "").toLowerCase();
@@ -126,7 +168,7 @@
     /* Mensaje centrado en el lienzo (vacío / error): nunca un grafo en blanco. */
     function svgSize() {
         const W = (svg.clientWidth && svg.clientWidth > 50) ? svg.clientWidth : (svg.parentElement ? svg.parentElement.clientWidth : 600) || 600;
-        const H = 480;
+        const H = (CFG.topoHeightPx || 480);
         try { svg.setAttribute("viewBox", "0 0 " + W + " " + H); } catch (e) {}
         return { W: W, H: H };
     }
@@ -155,7 +197,7 @@
         if (scenario()) return true;
         let res;
         try {
-            res = await fetch("/platform/api/scenarios", { credentials: "same-origin" });
+            res = await fetch(API.scenarios, { credentials: "same-origin" });
         } catch (e) {
             setStatus(t("loadError"));
             drawMessage(t("loadError"), String(e && e.message ? e.message : e));
@@ -222,7 +264,7 @@
         }
         let res;
         try {
-            res = await fetch("/platform/smac/state?scenario=" + encodeURIComponent(sc), { credentials: "same-origin" });
+            res = await fetch(API.smacState(sc), { credentials: "same-origin" });
         } catch (e) {
             setStatus(t("loadError"));
             drawMessage(t("loadError"), String(e && e.message ? e.message : e));
@@ -299,11 +341,310 @@
             stragglers: stragglers.map((n) => n),
             malicious: nodes.filter((n) => n && n.malicious).map((n) => n.idx),
             historic: isFallback, runtime_empty: isEmpty,
-            selected_node: selected, node_ids: nodes.map((n) => n && n.idx)
+            selected_node: selected, node_ids: nodes.map((n) => n && n.idx),
+            findings_count: Array.isArray(state.findings) ? state.findings.length : 0,
+            finding_types: Array.isArray(state.findings) ? state.findings.map((f) => f && f.type) : [],
+            /* Chat flotante: sugerencias pendientes (para proponer/decidir sin
+               salir del chat) + pausa automática. Solo datos compactos. */
+            suggestions: (Array.isArray(state.suggestions) ? state.suggestions : []).concat(
+                Array.isArray((state.architecture || {}).suggestions)
+                    ? state.architecture.suggestions : []
+            ).map((s) => s ? { id: s.id, kind: s.kind, title: s.title,
+                               reason: s.reason, params: s.params } : null).filter(Boolean),
+            auto_paused: !!(state.auto_paused && state.auto_paused.active)
         });
         renderTopo();
         renderPeers();
         updateControls();
+        updateRealtimeBtn();
+        renderFindings();
+        renderSuggestions();
+        renderLineage();
+        renderVerifications();
+        fetchThermalEnergy();
+    }
+
+    /* Sprint 7: verificaciones post-cambio (proyectado vs medido, sin LLM). */
+    function renderVerifications() {
+        const listEl = document.getElementById("smac-verifications-list");
+        if (!listEl) return;
+        const ver = (state && state.verifications) || {};
+        const done = Array.isArray(ver.completed) ? ver.completed : [];
+        const pend = Array.isArray(ver.pending) ? ver.pending : [];
+        while (listEl.firstChild) listEl.removeChild(listEl.firstChild);
+        if (!done.length && !pend.length) {
+            const empty = document.createElement("div");
+            empty.className = "small text-muted";
+            empty.textContent = t("noVerif");
+            listEl.appendChild(empty);
+            return;
+        }
+        done.forEach((v) => {
+            const box = document.createElement("div");
+            box.className = "small";
+            box.textContent = "✔ " + ((v && v.kind) || "?") + ": " + ((v && v.calibration) || "");
+            listEl.appendChild(box);
+        });
+        pend.forEach((v) => {
+            const box = document.createElement("div");
+            box.className = "small text-muted";
+            box.textContent = "… " + ((v && v.kind) || "?") + " (r" + ((v && v.due_round) || "?") + ")";
+            listEl.appendChild(box);
+        });
+    }
+
+    /* Sprint 6: cadena padre → hijo de ejecuciones (desde el state, sin LLM). */
+    function renderLineage() {
+        const listEl = document.getElementById("smac-lineage-list");
+        if (!listEl) return;
+        const lin = (state && state.lineage) || {};
+        const chain = Array.isArray(lin.chain) ? lin.chain : [];
+        while (listEl.firstChild) listEl.removeChild(listEl.firstChild);
+        if (!chain.length) {
+            const empty = document.createElement("div");
+            empty.className = "small text-muted";
+            empty.textContent = t("noLineage");
+            listEl.appendChild(empty);
+            return;
+        }
+        const trail = document.createElement("div");
+        trail.className = "small";
+        trail.textContent = chain.map((l) => (l.parent || "?") + " r" + (l.checkpoint_round)).join(" → ") +
+            " → " + (scenario() || "?");
+        listEl.appendChild(trail);
+    }
+
+    /* Sprint 3: sugerencia de agregador (determinista). El botón propone por el
+       flujo existente (/propose → tarjeta pendiente con Aceptar/Rechazar);
+       nada se ejecuta solo. */
+    function renderSuggestions() {
+        const listEl = document.getElementById("smac-suggestions-list");
+        const countEl = document.getElementById("smac-suggestions-count");
+        if (!listEl) return;
+        const suggs = (state && Array.isArray(state.suggestions)) ? state.suggestions : [];
+        const arch = (state && state.architecture) || {};
+        const archSuggs = Array.isArray(arch.suggestions) ? arch.suggestions : [];
+        const archRej = Array.isArray(arch.rejected) ? arch.rejected : [];
+        const all = suggs.concat(archSuggs);
+        while (listEl.firstChild) listEl.removeChild(listEl.firstChild);
+        /* Sprint 7+: banner de pausa automática con reanudación manual. */
+        const ap = (state && state.auto_paused) || {};
+        if (ap.active) {
+            const banner = document.createElement("div");
+            banner.className = "smac-card";
+            banner.style.background = "#fff3cd";
+            const txt = document.createElement("div");
+            txt.textContent = "⏸ " + t("autoPaused") + (ap.reason ? ": " + ap.reason : "");
+            const btn = document.createElement("button");
+            btn.className = "btn btn-sm btn-outline-dark mt-1";
+            btn.textContent = t("resume");
+            btn.onclick = async () => {
+                try {
+                    await fetch(API.smacResume, {
+                        method: "POST", headers: { "Content-Type": "application/json" },
+                        credentials: "same-origin",
+                        body: JSON.stringify({ scenario: scenario() }),
+                    });
+                } catch (e) {}
+                fetchState();
+            };
+            banner.appendChild(txt);
+            banner.appendChild(btn);
+            listEl.appendChild(banner);
+        }
+        if (countEl) countEl.textContent = all.length ? String(all.length) : "";
+        if (!all.length && !archRej.length) {
+            const empty = document.createElement("div");
+            empty.className = "small text-muted";
+            empty.textContent = t("noSugg");
+            listEl.appendChild(empty);
+            return;
+        }
+        all.forEach((s) => {
+            const box = document.createElement("div");
+            box.className = "smac-card";
+            box.style.background = "#e7f1ff";
+            const title = document.createElement("p");
+            title.innerHTML = "<strong>" + (s && s.title ? s.title : s.kind) + "</strong>";
+            const why = document.createElement("p");
+            why.className = "small text-muted";
+            why.textContent = (s && s.reason ? s.reason : "") + " · " + t("needsConfirm");
+            const btn = document.createElement("button");
+            btn.className = "btn btn-sm btn-primary";
+            btn.textContent = t("proposeChange");
+            btn.onclick = () => propose(s.kind, s.params, (s.title || s.kind) + ": " + (s.reason || ""));
+            box.appendChild(title);
+            box.appendChild(why);
+            /* Sprint 4-5: tabla costo/beneficio cuando la sugerencia la trae. */
+            if (s && s.params && s.params.cost) box.appendChild(costTable(s.params.cost));
+            box.appendChild(btn);
+            listEl.appendChild(box);
+        });
+        archRej.forEach((r) => {
+            const box = document.createElement("div");
+            box.className = "small text-muted";
+            box.textContent = (lang === "es" ? "Evaluado (no conviene): " : "Evaluated (not worthwhile): ") +
+                ((r && r.verdict) || "");
+            listEl.appendChild(box);
+        });
+    }
+
+    /* Sprint 2: hallazgos tipados del exec-interpreter (deterministas, sin LLM).
+       Se renderizan desde el state (no requieren Groq). */
+    function renderFindings() {
+        const listEl = document.getElementById("smac-findings-list");
+        const countEl = document.getElementById("smac-findings-count");
+        if (!listEl) return;
+        const findings = (state && Array.isArray(state.findings)) ? state.findings : [];
+        while (listEl.firstChild) listEl.removeChild(listEl.firstChild);
+        if (countEl) countEl.textContent = findings.length ? t("findingsCount")(findings.length) : "";
+        if (!findings.length) {
+            const empty = document.createElement("div");
+            empty.className = "small text-muted";
+            empty.textContent = t("noFindings");
+            listEl.appendChild(empty);
+            return;
+        }
+        findings.forEach((f) => {
+            const box = document.createElement("div");
+            box.className = "smac-finding smac-finding--" + ((f && f.severity) || "info");
+            const head = document.createElement("div");
+            head.className = "smac-f-head";
+            const sev = document.createElement("span");
+            sev.className = "smac-sev";
+            sev.textContent = (f && f.severity) || "info";
+            const typ = document.createElement("strong");
+            typ.textContent = (f && f.type) || "?";
+            head.appendChild(sev);
+            head.appendChild(typ);
+            const body = document.createElement("div");
+            body.className = "smac-f-body";
+            body.textContent = (f && f.summary) || "";
+            const nodes = (f && Array.isArray(f.nodes) && f.nodes.length)
+                ? " [nodos: " + f.nodes.join(",") + "]" : "";
+            const nev = (f && Array.isArray(f.evidence)) ? f.evidence.length : 0;
+            const meta = document.createElement("div");
+            meta.className = "smac-f-meta";
+            meta.textContent = nev + (lang === "es" ? " evidencias" : " evidence items") + nodes;
+            box.appendChild(head);
+            box.appendChild(body);
+            box.appendChild(meta);
+            listEl.appendChild(box);
+        });
+    }
+
+    /* Botón a Real-time metrics del escenario actual (nada hardcodeado:
+       se reconstruye con el escenario cargado en cada render). */
+    function updateRealtimeBtn() {
+        const btn = document.getElementById("smac-realtime-btn");
+        if (!btn) return;
+        const sc = scenario();
+        if (sc) {
+            btn.href = API.dashboardStatistics(sc);
+            btn.classList.remove("disabled");
+            btn.removeAttribute("aria-disabled");
+        } else {
+            btn.href = "#";
+            btn.classList.add("disabled");
+            btn.setAttribute("aria-disabled", "true");
+        }
+    }
+
+    let metricsBusy = false;
+    /* Orden fijo de desplegables; el resto (si aparece) va al final por nombre.
+       Sprint 1: + f1/recall/precision macro y recursos medidos (cpu/ram/temp sensor). */
+    const METRIC_ORDER = ["accuracy", "f1_macro", "recall_macro", "precision_macro", "loss",
+        "cpu_percent", "ram_percent", "cpu_temp", "round_time_s", "bytes_sent", "bytes_received",
+        "cpu_temp_est", "gpu_temp_est", "energy_total", "energy_estimated"];
+    const METRIC_LABEL = {
+        accuracy: "Accuracy", f1_macro: "F1 macro", recall_macro: "Recall macro",
+        precision_macro: "Precision macro", loss: "Loss",
+        cpu_percent: "CPU", ram_percent: "RAM", cpu_temp: "Temp. CPU (sensor)",
+        round_time_s: "Tiempo por ronda",
+        bytes_sent: "Bytes enviados", bytes_received: "Bytes recibidos",
+        cpu_temp_est: "Temp. CPU estimada", gpu_temp_est: "Temp. GPU estimada",
+        energy_total: "Energía total", energy_estimated: "Energía estimada"
+    };
+    function metricDigits(unit, entryDigits) {
+        if (Number.isFinite(entryDigits)) return entryDigits;
+        if (unit === "°C") return 1;
+        if (unit === "kWh") return 6;
+        if (unit === "MB") return 2;
+        if (unit === "s") return 2;
+        return 4;
+    }
+    function fmtMetric(v, unit, entryDigits) {
+        if (v === null || v === undefined || Number.isNaN(Number(v))) return "—";
+        const d = metricDigits(unit || "", entryDigits);
+        return Number(v).toFixed(d) + (unit ? " " + unit : "");
+    }
+    function metricDetail(name, entry, unit, isFallbackGpu) {
+        const parts = [];
+        if (entry.first !== undefined && entry.first !== null) parts.push(t("metricStart") + ": " + fmtMetric(entry.first, unit, entry.digits));
+        if (entry.best && entry.best.round !== undefined && entry.best.round !== null)
+            parts.push(t("metricBest") + " r" + entry.best.round + ": " + fmtMetric(entry.best.value, unit, entry.digits));
+        if (entry.delta !== undefined && entry.delta !== null && entry.delta !== 0)
+            parts.push("Δ: " + fmtMetric(entry.delta, unit, entry.digits));
+        if (name === "gpu_temp_est" && isFallbackGpu) parts.push(t("metricCpuFallback"));
+        /* Sprint 1, regla 5: las *_est son estimaciones ARX, nunca medidas. */
+        if ((name === "cpu_temp_est" || name === "gpu_temp_est") && !isFallbackGpu)
+            parts.push(lang === "es" ? "(estimado ARX)" : "(ARX estimate)");
+        return parts.length ? parts.join(" · ") : "—";
+    }
+    async function fetchThermalEnergy() {
+        const sc = scenario();
+        if (!sc || metricsBusy) return;
+        metricsBusy = true;
+        try {
+            const res = await fetch(API.scenarioSummary(sc), { credentials: "same-origin" });
+            if (!res.ok) return;
+            const data = await res.json();
+            const m = (data && data.metrics) || {};
+            const warns = Array.isArray(data.warnings) ? data.warnings.join(" ") : "";
+            const isFallbackGpu = /fallback CPU|sin telemetr.a GPU/i.test(warns);
+            const listEl = document.getElementById("smac-metrics-list");
+            const countEl = document.getElementById("smac-metrics-count");
+            if (!listEl) return;
+            const names = Object.keys(m).sort((a, b) => {
+                const ia = METRIC_ORDER.indexOf(a), ib = METRIC_ORDER.indexOf(b);
+                if (ia === -1 && ib === -1) return a.localeCompare(b);
+                if (ia === -1) return 1;
+                if (ib === -1) return -1;
+                return ia - ib;
+            });
+            while (listEl.firstChild) listEl.removeChild(listEl.firstChild);
+            if (!names.length) {
+                const empty = document.createElement("div");
+                empty.className = "small text-muted";
+                empty.textContent = "sin datos";
+                listEl.appendChild(empty);
+                if (countEl) countEl.textContent = "";
+                return;
+            }
+            if (countEl) countEl.textContent = names.length + (lang === "es" ? " métricas" : " metrics");
+            names.forEach((name) => {
+                const entry = m[name] || {};
+                const unit = entry.unit || "";
+                const box = document.createElement("details");
+                const head = document.createElement("summary");
+                const label = document.createElement("span");
+                label.textContent = METRIC_LABEL[name] || name;
+                const val = document.createElement("strong");
+                val.textContent = fmtMetric(entry.final, unit);
+                head.appendChild(label);
+                head.appendChild(val);
+                const body = document.createElement("div");
+                body.className = "smac-m-body";
+                body.textContent = metricDetail(name, entry, unit, isFallbackGpu);
+                box.appendChild(head);
+                box.appendChild(body);
+                listEl.appendChild(box);
+            });
+        } catch (e) {
+            /* best-effort: el panel sigue funcionando sin digest */
+        } finally {
+            metricsBusy = false;
+        }
     }
 
     function renderTopo() {
@@ -474,21 +815,30 @@
         const desc = document.createElement("div");
         desc.textContent = "⚙️ " + action.kind + ": " + action.description;
         box.appendChild(desc);
+        /* Sprint 4: tabla costo/beneficio + alternativa "seguir igual". */
+        if (action && action.params && action.params.cost) {
+            box.appendChild(costTable(action.params.cost));
+            const alt = document.createElement("div");
+            alt.className = "small text-muted mt-1";
+            alt.textContent = (lang === "es" ? "Alternativa: seguir igual." : "Alternative: keep as is.") +
+                (action.params.trigger ? " trigger=" + action.params.trigger : "");
+            box.appendChild(alt);
+        }
         let nameInput = null;
         if (action.kind === "stop_scenario") {
             nameInput = document.createElement("input");
             nameInput.className = "form-control form-control-sm mt-1";
-            nameInput.placeholder = "Type the scenario name to enable confirm";
+            nameInput.placeholder = t("confirmEnable");
             box.appendChild(nameInput);
         }
         const row = document.createElement("div");
         row.className = "mt-1";
         const ok = document.createElement("button");
         ok.className = "btn btn-sm btn-warning me-2";
-        ok.textContent = "Confirm & run";
+        ok.textContent = t("confirmRun");
         const no = document.createElement("button");
         no.className = "btn btn-sm btn-outline-secondary";
-        no.textContent = "Discard";
+        no.textContent = t("discard");
         ok.onclick = () => confirmAction(action.id, true, box, ok, no, nameInput ? nameInput.value : null);
         no.onclick = () => confirmAction(action.id, false, box, ok, no, null);
         row.appendChild(ok); row.appendChild(no);
@@ -496,10 +846,48 @@
         pendingEl.appendChild(box);
     }
 
+    /* Sprint 4: render de cost {compute/resources/network/transition/benefit}
+       con basis measured|projected|hypothesis|estimated|unavailable. */
+    function costTable(cost) {
+        const wrap = document.createElement("div");
+        wrap.className = "small mt-1";
+        const rows = [];
+        const fmtItem = (v) => {
+            if (!v || typeof v !== "object") return "—";
+            const val = (v.value === null || v.value === undefined) ? "no disponible" : (v.value + (v.unit ? " " + v.unit : ""));
+            return val + " (" + (v.basis || "?") + ")";
+        };
+        rows.push(["compute", fmtItem(cost.compute)]);
+        if (cost.resources && typeof cost.resources === "object") {
+            Object.keys(cost.resources).forEach((k) => rows.push(["· " + k, fmtItem(cost.resources[k])]));
+        }
+        rows.push(["network", fmtItem(cost.network)]);
+        if (cost.transition) {
+            const tr = cost.transition;
+            const lost = tr.lost_rounds ? fmtItem(tr.lost_rounds) : "—";
+            rows.push(["transition", ((tr.continuity && tr.continuity.mode) || "?") + " · perdidas: " + lost]);
+        }
+        if (cost.benefit) {
+            const b = cost.benefit;
+            rows.push(["benefit", "[" + b.low + ", " + b.mid + ", " + b.high + "] " + (b.unit || "") + " (" + (b.basis || "?") + ")"]);
+        }
+        const table = document.createElement("table");
+        table.className = "table table-sm mb-0";
+        rows.forEach((r) => {
+            const tr = document.createElement("tr");
+            const td0 = document.createElement("td"); td0.textContent = r[0];
+            const td1 = document.createElement("td"); td1.textContent = r[1];
+            tr.appendChild(td0); tr.appendChild(td1);
+            table.appendChild(tr);
+        });
+        wrap.appendChild(table);
+        return wrap;
+    }
+
     async function confirmAction(id, confirm, box, ok, no, confirmName) {
         ok.disabled = true; no.disabled = true;
         try {
-            const res = await fetch("/platform/smac/chat/confirm", {
+            const res = await fetch(API.smacConfirm, {
                 method: "POST", headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ id: id, confirm: confirm, confirm_name: confirmName }),
             });
@@ -512,22 +900,22 @@
         } catch (e) {
             const note = document.createElement("div");
             note.className = "mt-1 small text-danger";
-            note.textContent = "Request failed: " + e;
+            note.textContent = t("requestFailed") + ": " + e;
             box.appendChild(note);
         }
     }
 
     async function propose(kind, params, description) {
-        if (!scenario()) { alert("Load a scenario first."); return; }
+        if (!scenario()) { alert(t("loadFirst")); return; }
         try {
-            const res = await fetch("/platform/smac/propose", {
+            const res = await fetch(API.smacPropose, {
                 method: "POST", headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ scenario: scenario(), kind: kind, params: params, description: description }),
             });
-            if (res.status === 401) { alert("Session expired. Log in again."); return; }
+            if (res.status === 401) { alert(t("sessionExpired")); return; }
             const action = await res.json();
             pendingCard(action);
-        } catch (e) { alert("Propose failed: " + e); }
+        } catch (e) { alert(t("proposeFailed") + ": " + e); }
     }
 
     document.getElementById("smac-pause").onclick = () =>
@@ -540,7 +928,7 @@
         propose("select_aggregator", { node: target, algorithm: algo }, `Switch aggregation to ${algo} on ${target}`);
     };
     document.getElementById("smac-disconnect").onclick = () => {
-        if (!peerEl.value) { alert("Choose a peer first."); return; }
+        if (!peerEl.value) { alert(t("choosePeer")); return; }
         propose("propose_disconnect", { node: selected, peer: peerEl.value },
             `Propose node ${selected} disconnects from ${peerEl.value}`);
     };
@@ -558,7 +946,7 @@
     function startEvents() {
         if (eventSource) { try { eventSource.close(); } catch (e) { /* noop */ } }
         if (!scenario() || typeof EventSource === "undefined") return;
-        eventSource = new EventSource("/platform/api/smac/events?scenario=" + encodeURIComponent(scenario()));
+        eventSource = new EventSource(API.scenarioEvents(scenario()));
         /* Sin tarjeta de reasoning: los eventos solo refrescan el estado y
            avisan con el punto del chat flotante. */
         ["predicted_straggler", "node_offline", "node_back", "aggregator_switched",
@@ -588,7 +976,7 @@
             tmp.remove();
         }
         copyBtn.textContent = "✓";
-        setTimeout(() => { copyBtn.textContent = "⧉"; }, 1200);
+        setTimeout(() => { copyBtn.textContent = "⧉"; }, COPY_RESET_MS);
     };
     if (langBtn) langBtn.onclick = () => {
         lang = (lang === "es") ? "en" : "es";
@@ -597,7 +985,7 @@
     };
     function restartTimer() {
         if (timer) clearInterval(timer);
-        if (autoRefresh) timer = setInterval(() => { if (scenario()) fetchState(); }, 5000);
+        if (autoRefresh) timer = setInterval(() => { if (scenario()) fetchState(); }, POLL_MS);
     }
     // Re-medimos al cambiar el tamaño: el SVG usa viewBox dinámico y el
     // anillo se recalcula; sin esto, un card colapsado al inicio dejaba R=60

@@ -4,6 +4,8 @@ import traceback
 
 from sklearn.metrics import accuracy_score
 
+from nebula.config.defaults import DEFAULT_EPOCHS
+
 
 class Scikit:
     def __init__(self, model, data, config=None, logger=None):
@@ -12,7 +14,7 @@ class Scikit:
         self.config = config
         self.logger = logger
         self.round = 0
-        self.epochs = 1
+        self.epochs = DEFAULT_EPOCHS
         self.logger.log_data({"Round": self.round}, step=self.logger.global_step)
 
     def set_model(self, model):

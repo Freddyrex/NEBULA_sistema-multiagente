@@ -103,8 +103,11 @@ class DockerUtils:
         """
         try:
             # Connect to Docker
+            import os
+
             client = docker.from_env()
-            base_subnet = "192.168"
+            # §2.3/§3.4: base de subred por env (default legacy 192.168).
+            base_subnet = os.environ.get("NEBULA_DOCKER_SUBNET_BASE", "192.168")
 
             # Obtain existing docker subnets
             existing_subnets = []
@@ -130,7 +133,10 @@ class DockerUtils:
 
             # If no subnet is provided or it exists, find the next available one
             if not subnet or subnet in existing_subnets:
-                for i in range(50, 255):  # Iterate over 192.168.50.0 to 192.168.254.0
+                import os as _os
+
+                _start = int(_os.environ.get("NEBULA_DOCKER_SUBNET_START", 50))
+                for i in range(_start, 255):  # Iterate over 192.168.{start}.0 to 192.168.254.0
                     subnet = f"{base_subnet}.{i}.0/{prefix}"
                     potential_base = f"{base_subnet}.{i}"
                     if subnet not in existing_subnets:

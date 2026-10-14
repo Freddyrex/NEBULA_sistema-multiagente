@@ -9,6 +9,7 @@ from lightning import Trainer
 from lightning.pytorch.callbacks import RichModelSummary, RichProgressBar
 from lightning.pytorch.callbacks.progress.rich_progress import RichProgressBarTheme
 
+from nebula.config.defaults import DEFAULT_EPOCHS, MODEL_SUMMARY_DEPTH, TRAIN_LOG_EVERY_N_STEPS
 from nebula.core.utils.deterministic import enable_deterministic
 
 
@@ -20,7 +21,7 @@ class Siamese:
         self.config = config
         self.logger = logger
         self.__trainer = None
-        self.epochs = 1
+        self.epochs = DEFAULT_EPOCHS
         logging.getLogger("lightning.pytorch").setLevel(logging.INFO)
         self.round = 0
         enable_deterministic(seed=self.config.participant["scenario_args"]["random_seed"])
@@ -59,21 +60,24 @@ class Siamese:
             leave=True,
         )
         if self.config.participant["device_args"]["accelerator"] == "gpu":
-            # NEBULA uses 2 GPUs (max) to distribute the nodes.
-            if self.config.participant["device_args"]["devices"] > 1:
-                # If you have more than 2 GPUs, you should specify which ones to use.
-                gpu_id = ([1] if self.config.participant["device_args"]["idx"] % 2 == 0 else [2],)
+            # §7: GPU_ASSIGNMENT_STRATEGY=round_robin (defaults.py): IDs desde
+            # device_args.gpu_id con round-robin por índice (sin IDs hardcodeados).
+            gpu_ids = list(self.config.participant["device_args"].get("gpu_id") or [])
+            if len(gpu_ids) > 1:
+                gpu_id = [self.config.participant["device_args"]["idx"] % len(gpu_ids)]
+            elif gpu_ids:
+                gpu_id = gpu_ids
             else:
-                # If there is only one GPU, it will be used.
-                gpu_id = [1]
+                # Sin gpu_id explícito: GPU 0 por defecto (documentado, no silencioso).
+                gpu_id = [0]
 
             self.__trainer = Trainer(
-                callbacks=[RichModelSummary(max_depth=1), progress_bar],
+                callbacks=[RichModelSummary(max_depth=MODEL_SUMMARY_DEPTH), progress_bar],
                 max_epochs=self.epochs,
                 accelerator=self.config.participant["device_args"]["accelerator"],
                 devices=gpu_id,
                 logger=self.logger,
-                log_every_n_steps=50,
+                log_every_n_steps=TRAIN_LOG_EVERY_N_STEPS,
                 enable_checkpointing=False,
                 enable_model_summary=False,
                 enable_progress_bar=True,
@@ -82,12 +86,12 @@ class Siamese:
         else:
             # NEBULA uses only CPU to distribute the nodes
             self.__trainer = Trainer(
-                callbacks=[RichModelSummary(max_depth=1), progress_bar],
+                callbacks=[RichModelSummary(max_depth=MODEL_SUMMARY_DEPTH), progress_bar],
                 max_epochs=self.epochs,
                 accelerator=self.config.participant["device_args"]["accelerator"],
                 devices="auto",
                 logger=self.logger,
-                log_every_n_steps=50,
+                log_every_n_steps=TRAIN_LOG_EVERY_N_STEPS,
                 enable_checkpointing=False,
                 enable_model_summary=False,
                 enable_progress_bar=True,

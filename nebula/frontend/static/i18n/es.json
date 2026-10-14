@@ -1,0 +1,17 @@
+{
+  "title": "Panel SMAC",
+  "subtitle": "observabilidad cognitiva y control interactivo",
+  "scenario": "Escenario",
+  "load": "Cargar",
+  "loadFirst": "Carga un escenario primero.",
+  "sessionExpired": "Sesión expirada. Inicia sesión de nuevo.",
+  "proposeFailed": "Propuesta fallida",
+  "choosePeer": "Elige un par primero.",
+  "confirmEnable": "Escribe el nombre del escenario para confirmar",
+  "confirmRun": "Confirmar y ejecutar",
+  "discard": "Descartar",
+  "requestFailed": "Petición fallida",
+  "metricStart": "inicio",
+  "metricBest": "mejor",
+  "metricCpuFallback": "origen CPU (sin GPU)"
+}

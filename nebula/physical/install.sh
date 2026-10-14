@@ -35,7 +35,7 @@ sudo -v  # cache sudo credentials once
 ###############################################################################
 echo "· Syncing system clock with NTP …"
 sudo timedatectl set-ntp true
-sudo timedatectl set-timezone Europe/Madrid
+sudo timedatectl set-timezone "${NEBULA_TZ:-Etc/UTC}"
 for _ in {1..15}; do
   timedatectl | grep -q "System clock synchronized: yes" && break
   sleep 1

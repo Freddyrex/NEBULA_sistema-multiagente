@@ -14,8 +14,8 @@
     "uid": "",
     "idx": "",
     "name": "",
-    "username": "pi",
-    "password": "pi",
+    "username": "change-me",
+    "password": "change-me-generate-a-strong-password",
     "role": "aggregator",
     "proxy": false,
     "malicious": false,
@@ -136,8 +136,8 @@
   "tracking_args": {
     "enable_remote_tracking": false,
     "local_tracking": "basic",
-    "log_dir": "/Users/enrique/Documents/nebula/app/logs",
-    "config_dir": "/Users/enrique/Documents/nebula/app/config",
+    "log_dir": "/nebula/app/logs",
+    "config_dir": "/nebula/app/config",
     "run_hash": ""
   },
   "mender_args": {
@@ -153,6 +153,14 @@
     "grace_time_reporter": 10,
     "report_frequency": 5,
     "report_status_data_queue": true
+  },
+  "thermal_args": {
+    "cpu_tdp_w": 95.0,
+    "base_power_w": 15.0,
+    "temp_seed_c": 45.0,
+    "arx_cpu": {"a1": 0.88, "b1": 0.10, "b2": 0.02, "b3": 0.01, "b4": 0.05},
+    "arx_gpu": {"a2": 0.85, "g1": 0.08, "g2": 0.05, "g3": 0.002, "g4": 0.03},
+    "energy_weights": {"w0": 0.0005, "w1": 0.000042, "w2": 0.00000001, "w3": 0.000001, "w4": 0.00002, "w5": 0.00003, "w6": 0.00001, "w7": 0.0000001}
   },
   "discoverer_args": {
     "grace_time_discovery": 0,

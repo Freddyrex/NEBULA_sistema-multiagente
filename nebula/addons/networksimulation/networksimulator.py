@@ -83,9 +83,8 @@ def factory_network_simulator(net_sim, changing_interval, interface, verbose) ->
         "nebula": NebulaNS,
     }
 
-    net_serv = SIMULATION_SERVICES.get(net_sim, NebulaNS)
+    net_serv = SIMULATION_SERVICES.get(net_sim)
 
-    if net_serv:
-        return net_serv(changing_interval, interface, verbose)
-    else:
+    if net_serv is None:
         raise NetworkSimulatorException(f"Network Simulator {net_sim} not found")
+    return net_serv(changing_interval, interface, verbose)

@@ -161,3 +161,13 @@ docker-compose.yml
 
 # SMAC: Groq API key file (secret, never commit)
 apikey
+
+# Excluir documentación markdown del repo destino
+*.md
+
+# Excluir todo lo que sea API del repo destino
+nebula/controller/api/
+nebula/frontend/smac_api.py
+nebula/physical/api.py
+tests/test_api*.py
+**/*api*.py

@@ -3,10 +3,11 @@ FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y tzdata \
-    && ln -fs /usr/share/zoneinfo/Europe/Madrid /etc/localtime \
+    && ln -fs /usr/share/zoneinfo/${TZ} /etc/localtime \
     && dpkg-reconfigure -f noninteractive tzdata
 
-ENV TZ=Europe/Madrid
+ARG TZ=Etc/UTC
+ENV TZ=${TZ}
 
 # Install python3.11.7
 RUN apt-get update && apt-get install -y software-properties-common

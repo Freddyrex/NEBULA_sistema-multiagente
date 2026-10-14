@@ -15,6 +15,14 @@ import uvicorn
 from fastapi import Body, FastAPI, Request, status, HTTPException, Path, File, UploadFile
 from fastapi.concurrency import asynccontextmanager
 
+from nebula.config.defaults import (
+    BIND_HOST,
+    CONTROLLER_PORT,
+    GPU_BUSY_THRESHOLD,
+    GPU_FREE_THRESHOLD,
+    PHYSICAL_TIMEOUT_S,
+    TAILSCALE_BIN,
+)
 from nebula.controller.api import include_api, init_api
 from nebula.controller.database import scenario_set_all_status_to_finished, scenario_set_status_to_finished
 from nebula.controller.http_helpers import remote_get, remote_post_form
@@ -67,7 +75,14 @@ class TermEscapeCodeFormatter(logging.Formatter):
         return super().format(record)
 
 
-os.environ["NEBULA_CONTROLLER_NAME"] = os.environ.get("USER")
+def _controller_name() -> str:
+    """Nombre del controlador con fallback seguro (USER puede no existir)."""
+    import getpass
+
+    return os.environ.get("NEBULA_CONTROLLER_NAME") or os.environ.get("USER") or getpass.getuser()
+
+
+os.environ["NEBULA_CONTROLLER_NAME"] = _controller_name()
 
 
 def configure_logger(controller_log):
@@ -205,7 +220,7 @@ async def get_least_memory_gpu():
     gpu_with_least_memory_index = None
 
     if importlib.util.find_spec("pynvml") is not None:
-        max_memory_used_percent = 50
+        max_memory_used_percent = GPU_BUSY_THRESHOLD
         try:
             import pynvml
 
@@ -255,7 +270,7 @@ async def get_available_gpu():
                 memory_used_percent = (memory_info.used / memory_info.total) * 100
 
                 # Obtain available GPUs
-                if memory_used_percent < 5:
+                if memory_used_percent < GPU_FREE_THRESHOLD:
                     available_gpus.append(i)
 
             return {
@@ -846,7 +861,7 @@ async def discover_vpn():
     try:
         # 1) Launch the `tailscale status --json` subprocess
         proc = await asyncio.create_subprocess_exec(
-            "tailscale", "status", "--json",
+            TAILSCALE_BIN, "status", "--json",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -949,7 +964,7 @@ async def get_physical_node_state(ip: str):
                             or returns a non-200 HTTP status.
     """
     # Short global timeout so a dead node doesn't block the whole request
-    timeout = aiohttp.ClientTimeout(total=3)            # seconds
+    timeout = aiohttp.ClientTimeout(total=PHYSICAL_TIMEOUT_S)            # seconds
 
     try:
         async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -1110,9 +1125,9 @@ async def verify_user_controller(user: str = Body(...), password: str = Body(...
 if __name__ == "__main__":
     # Parse args from command line
     parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, default=5050, help="Port to run the controller on.")
+    parser.add_argument("--port", type=int, default=CONTROLLER_PORT, help="Port to run the controller on.")
     args = parser.parse_args()
     logging.info(f"Starting frontend on port {args.port}")
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=args.port)
+    uvicorn.run(app, host=BIND_HOST, port=args.port)

@@ -24,7 +24,11 @@ const NotesManager = {
 
         if (notesRow.style.display === 'none') {
             try {
-                const response = await fetch(`/platform/dashboard/${scenarioName}/notes`);
+                const API = window.NebulaApi || {};
+                const url = API.dashboardNotes
+                    ? API.dashboardNotes(scenarioName)
+                    : `/platform/dashboard/${scenarioName}/notes`;
+                const response = await fetch(url);
                 const data = await response.json();
 
                 if (data.status === 'success') {
@@ -46,7 +50,11 @@ const NotesManager = {
         const notesText = document.getElementById(`notes-text-${scenarioName}`).value;
 
         try {
-            const response = await fetch(`/platform/dashboard/${scenarioName}/save_note`, {
+            const API = window.NebulaApi || {};
+            const url = API.dashboardSaveNote
+                ? API.dashboardSaveNote(scenarioName)
+                : `/platform/dashboard/${scenarioName}/save_note`;
+            const response = await fetch(url, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

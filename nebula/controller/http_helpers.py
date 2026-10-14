@@ -6,7 +6,18 @@ from typing import Optional, Union
 import aiohttp
 from aiohttp import FormData
 
-_TIMEOUT = aiohttp.ClientTimeout(total=15)
+from nebula.config.defaults import CONTROLLER_SCHEME, HTTP_TIMEOUT_S
+
+_TIMEOUT = aiohttp.ClientTimeout(total=HTTP_TIMEOUT_S)
+
+
+def _base_url(host: str) -> str:
+    # §2.3: esquema por env (http en dev, https en prod tras TLS); si el host
+    # ya trae esquema, se respeta.
+    if "://" in host:
+        return f"{host}"
+    return f"{CONTROLLER_SCHEME}://{host}"
+
 
 async def _request_json(
     method: str,
@@ -15,7 +26,7 @@ async def _request_json(
     *,
     data: Optional[Union[FormData, bytes]] = None,
 ) -> tuple[int | None, object]:
-    url = f"http://{host}{endpoint}"
+    url = f"{_base_url(host)}{endpoint}"
     try:
         async with aiohttp.ClientSession(timeout=_TIMEOUT) as session:
             async with session.request(method.upper(), url, data=data) as resp:

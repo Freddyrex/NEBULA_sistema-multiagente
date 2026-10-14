@@ -17,6 +17,7 @@ from lightning.pytorch.loggers import CSVLogger
 from torch.nn import functional as F
 
 from nebula.config.config import TRAINING_LOGGER
+from nebula.config.defaults import DEFAULT_EPOCHS, MODEL_SUMMARY_DEPTH, TRAIN_LOG_EVERY_N_STEPS
 from nebula.core.utils.deterministic import enable_deterministic
 from nebula.core.utils.nebulalogger_tensorboard import NebulaTensorBoardLogger
 from nebula.core.nebulaevents import TestMetricsEvent, ValidationMetricsEvent
@@ -30,7 +31,7 @@ class NebulaProgressBar(ProgressBar):
     Logs the percentage of completion of the training process using logging.
     """
 
-    def __init__(self, log_every_n_steps=100):
+    def __init__(self, log_every_n_steps=TRAIN_LOG_EVERY_N_STEPS):
         super().__init__()
         self.enable = True
         self.log_every_n_steps = log_every_n_steps
@@ -129,7 +130,7 @@ class Lightning:
         self.datamodule = datamodule
         self.config = config
         self._trainer = None
-        self.epochs = 1
+        self.epochs = DEFAULT_EPOCHS
         self.round = 0
         self.experiment_name = self.config.participant["scenario_args"]["name"]
         self.idx = self.config.participant["device_args"]["idx"]
@@ -185,7 +186,7 @@ class Lightning:
                 gpu_index = self.config.participant["device_args"]["gpu_id"]
             logging_training.info(f"Creating trainer with accelerator GPU ({gpu_index})")
             self._trainer = Trainer(
-                callbacks=[ModelSummary(max_depth=1), NebulaProgressBar()],
+                callbacks=[ModelSummary(max_depth=MODEL_SUMMARY_DEPTH), NebulaProgressBar()],
                 max_epochs=self.epochs,
                 accelerator="gpu",
                 devices=gpu_index,
@@ -197,7 +198,7 @@ class Lightning:
         else:
             logging_training.info("Creating trainer with accelerator CPU")
             self._trainer = Trainer(
-                callbacks=[ModelSummary(max_depth=1), NebulaProgressBar()],
+                callbacks=[ModelSummary(max_depth=MODEL_SUMMARY_DEPTH), NebulaProgressBar()],
                 max_epochs=self.epochs,
                 accelerator="cpu",
                 devices="auto",

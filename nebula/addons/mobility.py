@@ -2,14 +2,23 @@ import asyncio
 import logging
 import math
 import random
-import time
 from functools import cached_property
 
 from nebula.addons.functions import print_msg_box
+from nebula.config.defaults import (
+    METERS_PER_DEGREE_LAT,
+    MOBILITY_APPROX_MARGIN,
+    MOBILITY_JITTER,
+    MOBILITY_MAX_DIRECT_M,
+    MOBILITY_MAX_STEP_M,
+)
 from nebula.core.eventmanager import EventManager
 from nebula.core.nebulaevents import ChangeLocationEvent, GPSEvent
 from nebula.core.network.communications import CommunicationsManager
 from nebula.core.utils.locker import Locker
+
+LAT_BOUNDS = (-90.0, 90.0)
+LON_BOUNDS = (-180.0, 180.0)
 
 
 class Mobility:
@@ -62,13 +71,30 @@ class Mobility:
         self.grace_time = self.config.participant["mobility_args"]["grace_time_mobility"]
         self.period = self.config.participant["mobility_args"]["change_geo_interval"]
         # INFO: These values may change according to the needs of the federation
-        self.max_distance_with_direct_connections = 150  # meters
-        self.max_movement_random_strategy = 50  # meters
-        self.max_movement_nearest_strategy = 50  # meters
-        self.max_initiate_approximation = self.max_distance_with_direct_connections * 1.2
+        mobility_args = self.config.participant["mobility_args"]
+        self.max_distance_with_direct_connections = float(
+            mobility_args.get("max_direct_m", MOBILITY_MAX_DIRECT_M)
+        )  # meters
+        self.max_movement_random_strategy = float(
+            mobility_args.get("max_step_m", MOBILITY_MAX_STEP_M)
+        )  # meters
+        self.max_movement_nearest_strategy = float(
+            mobility_args.get("max_step_m", MOBILITY_MAX_STEP_M)
+        )  # meters
+        self.max_initiate_approximation = (
+            self.max_distance_with_direct_connections * MOBILITY_APPROX_MARGIN
+        )
         self.radius_federation = float(config.participant["mobility_args"]["radius_federation"])
         self.scheme_mobility = config.participant["mobility_args"]["scheme_mobility"]
         self.round_frequency = int(config.participant["mobility_args"]["round_frequency"])
+        # RNG propio por nodo (semilla del escenario): nunca random.seed() global,
+        # que rompería reproducibilidad y contaminaría otros módulos.
+        scenario_seed = config.participant["scenario_args"].get("random_seed", 0)
+        try:
+            base_seed = int(scenario_seed)
+        except (TypeError, ValueError):
+            base_seed = 0
+        self._rng = random.Random(base_seed + self.config.participant["device_args"]["idx"])
         # Logging box with mobility information
         mobility_msg = f"Mobility: {self.mobility}\nMobility type: {self.mobility_type}\nRadius federation: {self.radius_federation}\nScheme mobility: {self.scheme_mobility}\nEach {self.round_frequency} rounds"
         print_msg_box(msg=mobility_msg, indent=2, title="Mobility information")
@@ -166,7 +192,8 @@ class Mobility:
         # await asyncio.sleep(self.grace_time)
         while await self.is_running():
             await self.change_geo_location()
-            await asyncio.sleep(self.period)
+            jitter = 1.0 + MOBILITY_JITTER * (self._rng.random() * 2 - 1)
+            await asyncio.sleep(self.period * jitter)
 
     async def change_geo_location_random_strategy(self, latitude, longitude):
         """
@@ -191,12 +218,15 @@ class Mobility:
         """
         if self._verbose:
             logging.info("📍  Changing geo location randomly")
-        # radius_in_degrees = self.radius_federation / 111000
-        max_radius_in_degrees = self.max_movement_random_strategy / 111000
-        radius = random.uniform(0, max_radius_in_degrees)  # noqa: S311
-        angle = random.uniform(0, 2 * math.pi)  # noqa: S311
+        # radius_in_degrees = self.radius_federation / METERS_PER_DEGREE_LAT
+        max_radius_in_degrees = self.max_movement_random_strategy / METERS_PER_DEGREE_LAT
+        radius = self._rng.uniform(0, max_radius_in_degrees)
+        angle = self._rng.uniform(0, 2 * math.pi)
         latitude += radius * math.cos(angle)
-        longitude += radius * math.sin(angle)
+        # La longitud se encoge con cos(lat): sin esto el paso E-O es hasta
+        # 1/cos(lat) veces mayor (p. ej. +40% en lat 60°).
+        lon_scale = max(0.2, math.cos(math.radians(latitude)))
+        longitude += radius * math.sin(angle) / lon_scale
         await self.set_geo_location(latitude, longitude)
 
     async def change_geo_location_nearest_neighbor_strategy(
@@ -232,9 +262,9 @@ class Mobility:
         # Calculating angle to the neighbor
         angle = math.atan2(neighbor_longitude - longitude, neighbor_latitude - latitude)
         # Convert maximum movement to angle
-        max_lat_change = self.max_movement_nearest_strategy / 111000  # Change degree to latitude
+        max_lat_change = self.max_movement_nearest_strategy / METERS_PER_DEGREE_LAT  # Change degree to latitude
         max_lon_change = self.max_movement_nearest_strategy / (
-            111000 * math.cos(math.radians(latitude))
+            METERS_PER_DEGREE_LAT * math.cos(math.radians(latitude))
         )  # Change dregree for longitude
         # Scale and direction
         delta_lat = max_lat_change * math.cos(angle) * scale_factor
@@ -265,7 +295,12 @@ class Mobility:
             - The coordinates are expected to be in decimal degrees format.
         """
 
-        if latitude < -90 or latitude > 90 or longitude < -180 or longitude > 180:
+        if (
+            latitude < LAT_BOUNDS[0]
+            or latitude > LAT_BOUNDS[1]
+            or longitude < LON_BOUNDS[0]
+            or longitude > LON_BOUNDS[1]
+        ):
             # If the new location is out of bounds, we keep the old location
             latitude = self.config.participant["mobility_args"]["latitude"]
             longitude = self.config.participant["mobility_args"]["longitude"]
@@ -300,7 +335,7 @@ class Mobility:
             - It logs actions taken during the execution for tracking and debugging purposes.
         """
         if self.mobility and (self.mobility_type == "topology" or self.mobility_type == "both"):
-            random.seed(time.time() + self.config.participant["device_args"]["idx"])
+            # Sin random.seed() global: se usa self._rng (semilla del escenario + idx).
             latitude = float(self.config.participant["mobility_args"]["latitude"])
             longitude = float(self.config.participant["mobility_args"]["longitude"])
             if True:

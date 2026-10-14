@@ -14,6 +14,7 @@ import docker
 from aiohttp import FormData
 
 from nebula.addons.topologymanager import TopologyManager
+from nebula.config import defaults as _defaults
 from nebula.config.config import Config
 from nebula.controller.http_helpers import remote_get, remote_post_form
 from nebula.core.datasets.adultcensus.adultcensus import AdultCensusDataset
@@ -116,6 +117,21 @@ class Scenario:
         feature_squeezing=None,
         adversarial_training=None,
         physical_ips=None,
+        # Sprint 3 (ROADMAP_AGENTE_ADAPTATIVO): banderas del agente adaptativo
+        # (exec_interpreter, aggregator_suggestions, aggregator_auto). Opcional
+        # y apagado por defecto; se persiste en scenario.json tal cual.
+        adaptive_agent=None,
+        # Sprint 6: linaje y checkpoints. parent_scenario enlaza la ejecución
+        # hija con su padre (series continuas en el panel); checkpoint_args
+        # ({every_n_rounds, keep_last}) activa el guardado en el nodo;
+        # resume_from ({scenario, checkpoint_round}) pide warm start.
+        # Todo opcional; se persiste en scenario.json tal cual.
+        parent_scenario=None,
+        checkpoint_args=None,
+        resume_from=None,
+        # Sprint 6 (agente adaptativo): reanudación enlazada. from_scenario es
+        # alias de lectura de parent_scenario (algunos clientes lo envían así).
+        from_scenario=None,
     ):
         """
         Initialize a Scenario instance.
@@ -168,6 +184,16 @@ class Scenario:
             sar_training (bool): Wheter SAR training is enabled.
             sar_training_policy (str): Training policy for SAR.
             physical_ips (list, optional): List of physical IPs for nodes. Defaults to None.
+            adaptive_agent (dict, optional): Adaptive-agent flags
+                (exec_interpreter, aggregator_suggestions, aggregator_auto).
+                All off by default. Defaults to None.
+            parent_scenario (str, optional): Parent execution name for linked
+                resume chains (panel shows parent → child). Defaults to None.
+            checkpoint_args (dict, optional): {every_n_rounds, keep_last} to
+                enable node checkpoints. Absent/disabled by default.
+            resume_from (dict, optional): {scenario, checkpoint_round} warm
+                start request, propagated to participant scenario_args.
+            from_scenario (str, optional): read alias of parent_scenario.
         """
         self.scenario_title = scenario_title
         self.scenario_description = scenario_description
@@ -247,6 +273,10 @@ class Scenario:
         self.sar_training = sar_training
         self.sar_training_policy = sar_training_policy
         self.physical_ips = physical_ips
+        self.adaptive_agent = adaptive_agent if isinstance(adaptive_agent, dict) else {}
+        self.parent_scenario = parent_scenario or from_scenario
+        self.checkpoint_args = checkpoint_args if isinstance(checkpoint_args, dict) else {}
+        self.resume_from = resume_from if isinstance(resume_from, dict) else {}
 
     def attack_node_assign(
         self,
@@ -605,13 +635,28 @@ class ScenarioManagement:
                 if node_key in self.scenario.nodes:
                     self.scenario.nodes[node_key]["ip"] = ip
 
-        # Assign the controller endpoint
+        # Assign the controller endpoint (§2.3: sin IP Tailscale personal;
+        # NEBULA_CONTROLLER_PUBLIC_ENDPOINT manda en `physical`).
+        _ctrl_port = os.environ.get("NEBULA_CONTROLLER_PORT", str(_defaults.CONTROLLER_PORT))
+        _public = (_defaults.CONTROLLER_PUBLIC_ENDPOINT or "").strip()
         if self.scenario.deployment == "docker":
-            self.controller = f"{os.environ.get('NEBULA_CONTROLLER_HOST')}:{os.environ.get('NEBULA_CONTROLLER_PORT')}"
+            self.controller = (
+                f"{os.environ.get('NEBULA_CONTROLLER_HOST', _defaults.CONTROLLER_HOST_FALLBACK)}:{_ctrl_port}"
+            )
         elif self.scenario.deployment == "physical":
-            self.controller = "100.120.46.10:49152"
+            if _public:
+                self.controller = _public
+            else:
+                _fallback_host = os.environ.get("NEBULA_CONTROLLER_HOST", _defaults.CONTROLLER_HOST_FALLBACK)
+                logging.warning(
+                    "NEBULA_CONTROLLER_PUBLIC_ENDPOINT vacío: usando %s:%s para nodos "
+                    "físicos (define el endpoint público en .env)",
+                    _fallback_host,
+                    _ctrl_port,
+                )
+                self.controller = f"{_fallback_host}:{_ctrl_port}"
         else:
-            self.controller = f"127.0.0.1:{os.environ.get('NEBULA_CONTROLLER_PORT')}"
+            self.controller = f"127.0.0.1:{_ctrl_port}"
 
         self.topologymanager = None
         self.env_path = None
@@ -776,6 +821,14 @@ class ScenarioManagement:
             participant_config["mobility_args"]["scheme_mobility"] = self.scenario.scheme_mobility
             participant_config["mobility_args"]["round_frequency"] = self.scenario.round_frequency
             participant_config["reporter_args"]["report_status_data_queue"] = self.scenario.report_status_data_queue
+            # Sprint 6: checkpoints opt-in y warm start por participante.
+            if isinstance(getattr(self.scenario, "checkpoint_args", None), dict) \
+                    and self.scenario.checkpoint_args:
+                participant_config["checkpoint_args"] = dict(self.scenario.checkpoint_args)
+            if isinstance(getattr(self.scenario, "resume_from", None), dict) \
+                    and self.scenario.resume_from:
+                participant_config.setdefault("scenario_args", {})
+                participant_config["scenario_args"]["resume_from"] = dict(self.scenario.resume_from)
             participant_config["mobility_args"]["topology_type"] = self.scenario.topology
             if self.scenario.with_sa:
                 participant_config["situational_awareness"] = {
@@ -823,14 +876,21 @@ class ScenarioManagement:
                         # SMAC cognitive layer (Fase 4): advisory LLM via Groq.
                         # Self-disables when GROQ_API_KEY is not set; the API
                         # key is never stored in scenario JSON.
+                        # §4: fuente única defaults.py (env override), no literales.
                         "groq_reasoning_agent": {
                             "class_name": "GroqReasoning",
-                            "model": "openai/gpt-oss-20b",
-                            "reasoning_effort": "low",
-                            "temperature": 1,
-                            "top_p": 1,
-                            "max_completion_tokens": 2048,
-                            "timeout_s": 0.3,
+                            "model": os.environ.get("SMAC_CHAT_MODEL", _defaults.SMAC_CHAT_MODEL),
+                            "reasoning_effort": os.environ.get(
+                                "SMAC_CHAT_REASONING_EFFORT", _defaults.SMAC_REASONING_EFFORT
+                            ),
+                            "temperature": float(
+                                os.environ.get("SMAC_TEMPERATURE", _defaults.SMAC_TEMPERATURE)
+                            ),
+                            "top_p": float(os.environ.get("SMAC_TOP_P", _defaults.SMAC_TOP_P)),
+                            "max_completion_tokens": int(
+                                os.environ.get("SMAC_CHAT_MAX_TOKENS", _defaults.SMAC_MAX_TOKENS)
+                            ),
+                            "timeout_s": float(os.environ.get("SMAC_TIMEOUT_S", _defaults.SMAC_TIMEOUT_S)),
                             "invoke_every_n_rounds": 5,
                             "invoke_on_tiebreak": True,
                             "api_key_env_var": "GROQ_API_KEY",
@@ -1350,10 +1410,15 @@ class ScenarioManagement:
         client = docker.from_env()
 
         self.config.participants.sort(key=lambda x: x["device_args"]["idx"])
-        i = 2
+        # §2.3/§3: IP inicial, delay, imagen, entrypoint y extra_hosts por env.
+        i = int(_defaults.SCENARIO_IP_START)
+        _node_image = os.environ.get("NEBULA_IMAGE_CORE", _defaults.IMAGE_CORE)
+        _node_entrypoint = os.environ.get("NEBULA_NODE_ENTRYPOINT", _defaults.NODE_ENTRYPOINT)
+        _start_delay = int(_defaults.SCENARIO_START_DELAY_S)
+        _extra_hosts = _defaults.extra_hosts()
         container_ids = []
         for idx, node in enumerate(self.config.participants):
-            image = "nebula-core"
+            image = _node_image
             name = f"{os.environ.get('NEBULA_CONTROLLER_NAME')}_{self.user}-participant{node['device_args']['idx']}"
 
             if node["device_args"]["accelerator"] == "gpu":
@@ -1368,7 +1433,7 @@ class ScenarioManagement:
                     binds=[f"{self.root_path}:/nebula", "/var/run/docker.sock:/var/run/docker.sock"],
                     privileged=True,
                     device_requests=[docker.types.DeviceRequest(driver="nvidia", count=-1, capabilities=[["gpu"]])],
-                    extra_hosts={"host.docker.internal": "host-gateway"},
+                    extra_hosts=_extra_hosts or None,
                 )
             else:
                 environment = {
@@ -1381,16 +1446,20 @@ class ScenarioManagement:
                     binds=[f"{self.root_path}:/nebula", "/var/run/docker.sock:/var/run/docker.sock"],
                     privileged=True,
                     device_requests=[],
-                    extra_hosts={"host.docker.internal": "host-gateway"},
+                    extra_hosts=_extra_hosts or None,
                 )
 
             volumes = ["/nebula", "/var/run/docker.sock"]
 
-            start_command = "sleep 10" if node["device_args"]["start"] else "sleep 0"
+            # Plantilla start_node.sh (§2.3): sin `ifconfig` obsoleto, sin
+            # `python` literal (el entrypoint corre con el intérprete del host
+            # vía `sys.executable` en physical; aquí imagen → python3).
+            start_command = f"sleep {_start_delay}" if node["device_args"]["start"] else "sleep 0"
             command = [
                 "/bin/bash",
                 "-c",
-                f"{start_command} && ifconfig && echo '{base}.1 host.docker.internal' >> /etc/hosts && python /nebula/nebula/core/node.py /nebula/app/config/{self.scenario_name}/participant_{node['device_args']['idx']}.json",
+                f"{start_command} && echo '{base}.1 host.docker.internal' >> /etc/hosts"
+                f" && python3 {_node_entrypoint} /nebula/app/config/{self.scenario_name}/participant_{node['device_args']['idx']}.json",
             ]
 
             networking_config = client.api.create_networking_config({
@@ -1407,7 +1476,9 @@ class ScenarioManagement:
             node["security_args"]["certfile"] = f"/nebula/app/certs/participant_{node['device_args']['idx']}_cert.pem"
             node["security_args"]["keyfile"] = f"/nebula/app/certs/participant_{node['device_args']['idx']}_key.pem"
             node["security_args"]["cafile"] = "/nebula/app/certs/ca_cert.pem"
-            node = json.loads(json.dumps(node).replace("192.168.50.", f"{base}."))  # TODO change this
+            # §2.3: reemplazo de subred legacy por env (temporal hasta DNS Docker).
+            _legacy = _defaults.LEGACY_SUBNET_PREFIX
+            node = json.loads(json.dumps(node).replace(_legacy, f"{base}."))
 
             # Write the config file in config directory
             with open(f"{self.config_dir}/participant_{node['device_args']['idx']}.json", "w") as f:
@@ -1519,14 +1590,21 @@ class ScenarioManagement:
                     key=lambda node: node["device_args"]["idx"],
                     reverse=True,
                 )
+                import sys as _sys
+
+                _delay = int(_defaults.SCENARIO_START_DELAY_S)
+                _entry = os.environ.get("NEBULA_NODE_ENTRYPOINT", _defaults.NODE_ENTRYPOINT)
                 for node in sorted_participants:
                     if node["device_args"]["start"]:
-                        commands += "sleep 10\n"
+                        commands += f"sleep {_delay}\n"
                     else:
                         commands += "sleep 2\n"
                     commands += f'echo "Running node {node["device_args"]["idx"]}..."\n'
                     commands += f"OUT_FILE={self.root_path}/app/logs/{self.scenario_name}/participant_{node['device_args']['idx']}.out\n"
-                    commands += f"python {self.root_path}/nebula/core/node.py {self.root_path}/app/config/{self.scenario_name}/participant_{node['device_args']['idx']}.json &\n"
+                    commands += (
+                        f"{_sys.executable} {_entry} "
+                        f"{self.root_path}/app/config/{self.scenario_name}/participant_{node['device_args']['idx']}.json &\n"
+                    )
                     commands += "echo $! >> $PID_FILE\n\n"
 
                 commands += 'echo "All nodes started. PIDs stored in $PID_FILE"\n'

@@ -410,7 +410,7 @@ const TopologyManager = (function() {
         const isPhysical = document.getElementById("physical-devices-radio").checked;
 
         if (isPhysical) {
-            const texture = new THREE.TextureLoader().load('/platform/static/images/physical-device.png');
+            const texture = new THREE.TextureLoader().load(((window.NebulaApi && window.NebulaApi.staticImage) ? window.NebulaApi.staticImage('physical-device.png') : '/platform/static/images/physical-device.png'));
             const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
             const sprite = new THREE.Sprite(spriteMaterial);
             sprite.scale.set(20, 15, 0);

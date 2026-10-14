@@ -8,20 +8,41 @@ from __future__ import annotations
 
 import pandas as pd
 
+from nebula.config.defaults import (
+    CONVERGENCE_EPS,
+    CONVERGENCE_K,
+    DIGEST_ROUND_ND,
+    METRICS_SCHEMA_VERSION,
+    NO_OUTLIER_METRICS,
+    STRAGGLER_RATIO,
+    outlier_gap_for,
+)
+
 METRIC_META = {
     "accuracy": {"higher_is_better": True},
     "loss": {"higher_is_better": False},
+    # Sprint 1 (ROADMAP_AGENTE_ADAPTATIVO): F1/recall/precision macro + recursos.
+    "f1_macro": {"higher_is_better": True},
+    "recall_macro": {"higher_is_better": True},
+    "precision_macro": {"higher_is_better": True},
+    "cpu_percent": {"higher_is_better": False},
+    "ram_percent": {"higher_is_better": False},
+    "cpu_temp": {"higher_is_better": False},
     "round_time_s": {"higher_is_better": False},
     "bytes_sent": {"higher_is_better": False},
     "bytes_received": {"higher_is_better": False},
+    "cpu_temp_est": {"higher_is_better": False},
+    "gpu_temp_est": {"higher_is_better": False},
+    "energy_total": {"higher_is_better": False},
+    "energy_estimated": {"higher_is_better": False},
 }
 
 
-def _r(x, nd=4):
+def _r(x, nd=DIGEST_ROUND_ND):
     return None if x is None or pd.isna(x) else round(float(x), nd)
 
 
-def convergence_round(s: pd.Series, eps=0.005, k=3):
+def convergence_round(s: pd.Series, eps=CONVERGENCE_EPS, k=CONVERGENCE_K):
     """Primera ronda desde la que la variación entre rondas es < eps durante k rondas."""
     vals, rounds = s.to_list(), s.index.to_list()
     for i in range(1, len(vals) - k + 1):
@@ -34,13 +55,13 @@ def build_digest(
     series: pd.DataFrame,
     events: pd.DataFrame,
     meta: dict,
-    gap=0.05,
-    straggler_ratio=1.5,
+    gap=None,
+    straggler_ratio=STRAGGLER_RATIO,
 ) -> dict:
     """series: [metric, scope, node_id, round, value, ts]
     events: [ts, round, node_id, type, source, detail]"""
     digest = {
-        "schema_version": "1.0",
+        "schema_version": METRICS_SCHEMA_VERSION,
         "scenario": meta,
         "metrics": {},
         "nodes": {},
@@ -78,11 +99,14 @@ def build_digest(
             {"node_id": int(n), "value": _r(v)} for n, v in final.items()
         ]
         median = final.median()
+        # §6.7: gap por métrica (JSON env) con fallback al global.
+        _gap = float(gap) if gap is not None else outlier_gap_for(metric)
         digest["metrics"][metric]["outliers"] = [
             {"node_id": int(n), "value": _r(v), "gap_vs_median": _r(v - median)}
             for n, v in final.items()
-            if abs(v - median) > gap and metric != "round_time_s"
+            if abs(v - median) > _gap and metric not in NO_OUTLIER_METRICS
         ]
+        digest["metrics"][metric]["outlier_gap"] = _gap
 
     # Nodos lentos (tiempo medio de ronda vs mediana)
     if "round_time_s" in node_rows["metric"].values:
@@ -107,7 +131,7 @@ def build_digest(
 
     if not events.empty:
         digest["events"] = {
-            "count": int(len(events)),
+            "count": len(events),
             "by_type": events["type"].value_counts().to_dict(),
             "first_per_node": {
                 int(n): {"round": _round_or_none(g["round"].min()), "type": g.sort_values("ts").iloc[0]["type"]}

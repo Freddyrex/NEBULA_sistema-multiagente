@@ -19,11 +19,18 @@ DEFAULT_COMMAND_TTL_S = 300.0
 ACTION_SELECT_AGGREGATOR = "select_aggregator"
 ACTION_PAUSE = "pause"
 ACTION_PROPOSE_DISCONNECT = "propose_disconnect"
+# Sprint 5 (ROADMAP_AGENTE_ADAPTATIVO): dynamic simulation parameters.
+ACTION_ADJUST_ROUNDS = "adjust_rounds"
+ACTION_ADJUST_EPOCHS = "adjust_epochs"
+ACTION_SWAP_MODEL = "swap_model"
 
 SUPPORTED_OPERATOR_ACTIONS = (
     ACTION_SELECT_AGGREGATOR,
     ACTION_PAUSE,
     ACTION_PROPOSE_DISCONNECT,
+    ACTION_ADJUST_ROUNDS,
+    ACTION_ADJUST_EPOCHS,
+    ACTION_SWAP_MODEL,
 )
 
 
@@ -106,6 +113,39 @@ def read_command_result(commands_dir: str, command_id: str, node_idx: str) -> di
             return json.load(f)
     except Exception:
         return None
+
+
+def collect_command_results(
+    commands_dir: str | None, command_id: str, expected_nodes: list[str] | None = None
+) -> dict[str, Any]:
+    """Collect per-node results of a broadcast command (Sprint 5).
+
+    Returns ``{"results": {node: record}, "missing": [nodes]}`` where missing
+    covers expected nodes without a result file yet (not responding within the
+    wait window — never assumed successful). Malformed files count as missing.
+    Never raises.
+    """
+    results: dict[str, Any] = {}
+    try:
+        if not commands_dir or not os.path.isdir(commands_dir):
+            return {"results": results, "missing": list(expected_nodes or [])}
+        prefix = f"{command_id}.result."
+        for name in sorted(os.listdir(commands_dir)):
+            if not name.startswith(prefix) or not name.endswith(".json"):
+                continue
+            node = name[len(prefix):-len(".json")]
+            try:
+                with open(os.path.join(commands_dir, name)) as f:
+                    results[node] = json.load(f)
+            except Exception:
+                continue
+    except Exception:
+        pass
+    try:
+        missing = [str(n) for n in (expected_nodes or []) if str(n) not in results]
+    except Exception:
+        missing = []
+    return {"results": results, "missing": missing}
 
 
 class OperatorBus:
@@ -214,6 +254,12 @@ class OperatorBus:
         try:
             if action == ACTION_SELECT_AGGREGATOR:
                 result = await self._do_select_aggregator(params)
+            elif action == ACTION_ADJUST_ROUNDS:
+                result = await self._do_adjust_rounds(params)
+            elif action == ACTION_ADJUST_EPOCHS:
+                result = await self._do_adjust_epochs(params)
+            elif action == ACTION_SWAP_MODEL:
+                result = await self._do_swap_model(params)
             elif action == ACTION_PAUSE:
                 result = await self._do_pause(params)
             elif action == ACTION_PROPOSE_DISCONNECT:
@@ -245,6 +291,171 @@ class OperatorBus:
         await new_aggregator.init()
         engine._aggregator = new_aggregator
         return "ok", f"aggregator hot-swapped {previous} -> {algorithm}"
+
+    async def _do_adjust_rounds(self, params: dict) -> tuple[str, str]:
+        """Set a new total_rounds (Sprint 5). Applies at the round boundary:
+        the ``while self.round < self.total_rounds`` header (engine.py) re-reads
+        the attribute every iteration, so the current round always finishes and
+        the new total governs the next header check. Reduction below the current
+        round ends the scenario after the running round (test + shutdown run).
+        """
+        try:
+            new_total = int(params.get("total_rounds"))
+        except (TypeError, ValueError):
+            return "error", "adjust_rounds needs integer {total_rounds}"
+        if new_total <= 0 or new_total > 100000:
+            return "error", f"total_rounds {new_total} out of range (1..100000)"
+        engine = self._engine
+        try:
+            previous = engine.total_rounds
+        except Exception:
+            return "error", "engine has no total_rounds attribute"
+        try:
+            lock = engine.get_round_lock()
+        except Exception:
+            lock = None
+        try:
+            if lock is not None:
+                async with lock:
+                    engine.total_rounds = new_total
+                    try:
+                        engine.config.participant["scenario_args"]["rounds"] = new_total
+                    except Exception:
+                        pass
+            else:
+                engine.total_rounds = new_total
+        except Exception as e:
+            return "error", f"could not apply total_rounds: {e}"
+        return "ok", f"total_rounds {previous} -> {new_total} (applies at round boundary)"
+
+    async def _do_adjust_epochs(self, params: dict) -> tuple[str, str]:
+        """Set local epochs per round (Sprint 5). Takes effect on the next
+        trainer build (``set_epochs`` only stores; ``create_trainer`` consumes
+        it as ``max_epochs``), i.e. from the next round on."""
+        try:
+            new_epochs = int(params.get("epochs"))
+        except (TypeError, ValueError):
+            return "error", "adjust_epochs needs integer {epochs}"
+        if new_epochs <= 0 or new_epochs > 1000:
+            return "error", f"epochs {new_epochs} out of range (1..1000)"
+        engine = self._engine
+        try:
+            trainer = engine.trainer
+        except Exception:
+            return "error", "engine has no trainer"
+        try:
+            previous = getattr(trainer, "epochs", None)
+            trainer.set_epochs(new_epochs)
+            try:
+                engine.config.participant["training_args"]["epochs"] = new_epochs
+            except Exception:
+                pass
+        except Exception as e:
+            return "error", f"could not apply epochs: {e}"
+        return "ok", f"epochs {previous} -> {new_epochs} (applies from next round)"
+
+    async def _do_swap_model(self, params: dict) -> tuple[str, str]:
+        """Hot-swap the model for a compatible one with fresh weights (Sprint 5).
+
+        Only between registered models of the SAME dataset (same I/O signature;
+        state_dicts are incompatible, so weights restart — continuity none
+        until Sprint 6 checkpoints). Refused mid-round (retry at the boundary)
+        and for incompatible/unknown targets with a clear message. Rebuilds the
+        Lightning trainer so the new model's optimizers take effect.
+        """
+        to_model = params.get("to_model", "")
+        engine = self._engine
+        try:
+            dataset = engine.config.participant["data_args"]["dataset"]
+            from_model = engine.config.participant["model_args"]["model"]
+        except Exception:
+            return "error", "engine config has no data_args/model_args"
+        try:
+            from nebula.core.models.registry import check_compatible, instantiate
+        except Exception as e:
+            return "error", f"model registry unavailable: {e}"
+        ok, msg = check_compatible(dataset, from_model, to_model)
+        if not ok:
+            return "error", msg
+        # Sprint 6: checkpoint previo al cambio (best-effort, nunca bloquea).
+        self._save_pre_change_checkpoint(engine, reason="swap_model")
+        try:
+            if await engine._round_in_process_lock.locked_async():
+                return "error", "round in progress: retry swap at the round boundary"
+        except Exception:
+            pass
+        try:
+            new_model = instantiate(dataset, to_model)
+        except Exception as e:
+            return "error", f"cannot instantiate {to_model!r}: {e}"
+        try:
+            trainer = engine.trainer
+            trainer.cleanup()
+            trainer.set_model(new_model)
+            try:
+                current_round = int(engine.round or 0)
+            except (TypeError, ValueError):
+                current_round = 0
+            trainer.set_current_round(current_round)
+            trainer.create_trainer()
+            try:
+                engine.config.participant["model_args"]["model"] = str(to_model)
+            except Exception:
+                pass
+            self._purge_pending_aggregations(engine)
+        except Exception as e:
+            return "error", f"swap failed, previous model kept: {e}"
+        return "ok", (f"model swapped {from_model!r} -> {to_model!r} with fresh weights "
+                      f"(same I/O, state_dict incompatible; round continues at {current_round})")
+
+    @staticmethod
+    def _save_pre_change_checkpoint(engine, reason: str = "arch_change") -> None:
+        """Sprint 6: best-effort pre-change checkpoint (never blocks the change)."""
+        try:
+            from nebula.core.checkpoint import save_checkpoint
+
+            scenario = None
+            try:
+                scenario = engine.config.participant["scenario_args"].get("name")
+            except Exception:
+                scenario = None
+            try:
+                idx = engine.config.participant["device_args"].get("idx", 0)
+                tracking = engine.config.participant.get("tracking_args") or {}
+                config_dir = os.environ.get("NEBULA_CONFIG_DIR") or tracking.get("config_dir", "")
+                rnd = engine.round if getattr(engine, "round", None) is not None else 0
+                state_dict = engine.trainer.model.state_dict()
+                model_info = {
+                    "model_class": type(engine.trainer.model).__name__,
+                    "model_name": (engine.config.participant.get("model_args") or {}).get("model"),
+                    "dataset": (engine.config.participant.get("data_args") or {}).get("dataset"),
+                    "reason": reason,
+                }
+                save_checkpoint(config_dir, scenario, idx, int(rnd), state_dict, model_info, None, {}, 3)
+            except Exception as e:
+                logging.warning(f"checkpoint | pre-change save failed: {e}")
+        except Exception:
+            pass
+
+    @staticmethod
+    def _purge_pending_aggregations(engine) -> None:
+        """Best-effort purge of stored updates so the next aggregation cannot
+        mix old-shape tensors with the fresh model."""
+        try:
+            agg = getattr(engine, "_aggregator", None)
+            if agg is None:
+                return
+            for attr in ("_pending_models_to_aggregate", "pending_models", "_updates", "updates"):
+                try:
+                    buf = getattr(agg, attr, None)
+                    if isinstance(buf, dict):
+                        buf.clear()
+                    elif isinstance(buf, list):
+                        del buf[:]
+                except Exception:
+                    continue
+        except Exception:
+            pass
 
     async def _do_pause(self, params: dict) -> tuple[str, str]:
         paused = bool(params.get("paused", True))

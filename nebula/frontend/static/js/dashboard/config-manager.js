@@ -18,7 +18,11 @@ const ConfigManager = {
 
         if (configRow.style.display === 'none') {
             try {
-                const response = await fetch(`/platform/dashboard/${scenarioName}/config`);
+                const API = window.NebulaApi || {};
+                const url = API.dashboardConfig
+                    ? API.dashboardConfig(scenarioName)
+                    : `/platform/dashboard/${scenarioName}/config`;
+                const response = await fetch(url);
                 const data = await response.json();
 
                 if (data.status === 'success') {

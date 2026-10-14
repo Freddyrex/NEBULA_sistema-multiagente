@@ -269,12 +269,26 @@ async def initialize_databases(databases_dir):
         desired_columns = {"scenario": "TEXT PRIMARY KEY", "scenario_notes": "TEXT"}
         await ensure_columns(conn, "notes", desired_columns)
 
-    username = os.environ.get("NEBULA_DEFAULT_USER", "admin")
-    password = os.environ.get("NEBULA_DEFAULT_PASSWORD", "admin")
+    from nebula.controller.api.security.bootstrap import require_admin_credentials
+
     if not list_users():
+        username, password = require_admin_credentials()
+        logging.warning(
+            "Bootstrap admin (§1.2): si es dev y el password fue generado, "
+            "solo se muestra una vez en el log anterior."
+        )
         add_user(username, password, "admin")
-    if not verify_hash_algorithm(username):
-        update_user(username, password, "admin")
+    else:
+        users = list_users()
+        username = users[0] if isinstance(users, list) and users else None
+        if username:
+            try:
+                if not verify_hash_algorithm(username):
+                    # Rotación de algoritmo: requiere password actual en env.
+                    _u, _p = require_admin_credentials()
+                    update_user(username, _p, "admin")
+            except Exception:
+                pass
 
 
 def list_users(all_info=False):

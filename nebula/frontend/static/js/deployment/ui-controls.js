@@ -150,7 +150,7 @@ const UIControls = (function() {
 
             const imageName = imageMap[partitionSelect.value];
             if (imageName) {
-                methodtipImage.src = `/platform/static/images/${imageName}`;
+                methodtipImage.src = ((window.NebulaApi && window.NebulaApi.staticImage) ? window.NebulaApi.staticImage(imageName) : (`/platform/static/images/${imageName}`));
                 methodtipImage.style.display = "block";
             }
         });
@@ -344,7 +344,7 @@ const UIControls = (function() {
             document.getElementById("spinner").style.display = "block";
 
             try {
-                const response = await fetch("/platform/dashboard/deployment/run", {
+                const _apiD = (window.NebulaApi || {}); const response = await fetch((_apiD.deploymentRun || "/platform/dashboard/deployment/run"), {
                     method: "POST",
                     headers: {
                         'Content-Type': 'application/json'
@@ -473,7 +473,7 @@ const UIControls = (function() {
         const participantImg = document.createElement("img");
         participantImg.id = `participant-img-${index}`;
         participantImg.setAttribute("data-id", index.toString());
-        participantImg.src = "/platform/static/images/device.png";
+        participantImg.src = ((window.NebulaApi && window.NebulaApi.staticImage) ? window.NebulaApi.staticImage("device.png") : "/platform/static/images/device.png");
         participantImg.width = 50;
         participantImg.height = 50;
         participantImg.style.marginRight = "10px";
@@ -666,7 +666,7 @@ const UIControls = (function() {
 
         discoverBtn.addEventListener('click', async () => {
             try {
-                const res = await fetch('/platform/api/discover-vpn');
+                const _apiV = (window.NebulaApi || {}); const res = await fetch((_apiV.discoverVpn || '/platform/api/discover-vpn'));
                 if (!res.ok) throw new Error(res.statusText);
 
                 const { ips } = await res.json();

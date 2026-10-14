@@ -27,6 +27,103 @@
   var homeParent = chat.parentNode;
   var homeNext = chat.nextSibling;
 
+  /* ---------- historial por escenario (una sección por escenario) ----------
+     Cada escenario guarda su propia conversación (localStorage) y empieza
+     de 0 la primera vez. Sin escenario se usa la sección "__general__". */
+  var CFG = window.NebulaConfig || {};
+  var API = window.NebulaApi || {};
+  var BREAKPOINT_DOCK = CFG.breakpointDock || 1280;
+  var CHIPS_MAX = CFG.chipsMax || 3;
+  var READY_RESET_MS = CFG.chatReadyResetMs || 5000;
+  var _mqDock = (window.matchMedia ? window.matchMedia("(min-width: " + BREAKPOINT_DOCK + "px)") : null);
+  var HIST_KEY = "nb_chat_hist_v1";
+  var HIST_MAX_MSG = CFG.histMaxMsg || 60,
+    HIST_MAX_SC = CFG.histMaxSc || 15,
+    HIST_MAX_LEN = CFG.histMaxLen || 2000;
+  var GLOBAL_SECTION = "__general__";
+  var activeScenario = "";
+  function histKey(sc) { return (sc || "").trim() || GLOBAL_SECTION; }
+  function histLoad() {
+    try {
+      var d = JSON.parse(localStorage.getItem(HIST_KEY) || "{}");
+      return (d && typeof d === "object") ? d : {};
+    } catch (e) { return {}; }
+  }
+  function histSaveAll(d) {
+    try {
+      var keys = Object.keys(d).filter(function (k) { return Array.isArray(d[k]) && d[k].length; });
+      keys.sort(function (a, b) {
+        var ta = ((d[a][d[a].length - 1]) || {}).ts || 0;
+        var tb = ((d[b][d[b].length - 1]) || {}).ts || 0;
+        return ta - tb;
+      });
+      var out = {};
+      keys.slice(-HIST_MAX_SC).forEach(function (k) { out[k] = d[k].slice(-HIST_MAX_MSG); });
+      localStorage.setItem(HIST_KEY, JSON.stringify(out));
+    } catch (e) {}
+  }
+  function histGet(sc) {
+    var h = histLoad()[histKey(sc)];
+    return Array.isArray(h) ? h : [];
+  }
+  function histPush(sc, role, text) {
+    if (!text) return;
+    var d = histLoad();
+    var k = histKey(sc);
+    var h = Array.isArray(d[k]) ? d[k] : [];
+    h.push({ role: role, text: String(text).slice(0, HIST_MAX_LEN), ts: Date.now() });
+    d[k] = h.slice(-HIST_MAX_MSG);
+    histSaveAll(d);
+  }
+  function histClear(sc) {
+    var d = histLoad();
+    delete d[histKey(sc)];
+    histSaveAll(d);
+  }
+  function sectionDivider(sc) {
+    var el = document.createElement("div");
+    el.className = "nb-sec";
+    el.textContent = "— " + t("secScenario") + " " + (sc.trim() || "…") + " —";
+    return el;
+  }
+  function switchScenario(sc) {
+    sc = (sc || "").trim();
+    if (sc === activeScenario) return;
+    activeScenario = sc;
+    log.innerHTML = "";
+    var h = histGet(sc);
+    if (h.length) {
+      log.appendChild(sectionDivider(sc));
+      h.forEach(function (m) { addMsg(m.role, m.text, { persist: false }); });
+      greeted = true;
+      greetedGeneric = false;
+      renderChips();
+      renderCtx();
+    } else {
+      /* Sección nueva: se empieza de 0; el saludo fluye al abrir. */
+      greeted = false;
+      greetedGeneric = false;
+      if (chat.dataset.open === "true") {
+        greeted = true;
+        addMsg("agent", greet());
+        renderChips();
+        renderCtx();
+      }
+    }
+  }
+  function clearActiveSection() {
+    histClear(activeScenario);
+    log.innerHTML = "";
+    greeted = false;
+    greetedGeneric = false;
+    if (chat.dataset.open === "true") {
+      greeted = true;
+      addMsg("agent", greet());
+      renderChips();
+      renderCtx();
+    }
+  }
+
   /* ---------- idioma (sigue a la UI; por defecto el del navegador) ---------- */
   function locale() {
     var ctx = (window.NebulaAgent && window.NebulaAgent.ctx) || {};
@@ -52,12 +149,16 @@
       chipNode: function (n) { return "Explicar el nodo " + n; },
       needLogin: "Inicia sesión primero: usa el menú Login de la barra superior.",
       needScenario: "Para actuar necesito un escenario. Abre uno desde el Dashboard y hablamos allí: veo el escenario abierto automáticamente.",
+      newChat: "Empezar de 0 (borra el historial de este escenario)",
+      secScenario: "Escenario",
       degraded: "Nota: estoy en modo degradado (sin modelo en línea).",
       sessionExpired: "Tu sesión expiró. Vuelve a iniciar sesión.",
       connFail: "No se pudo conectar con el agente. ",
       confirmFail: "No se pudo confirmar la acción. Inténtalo de nuevo.",
       done: "Hecho: ", failed: "No se pudo ejecutar: ",
-      confirm: "Confirmar", reject: "Rechazar",
+      confirm: "Confirmar", reject: "Rechazar", goTo: "Ir a nuevo escenario",
+      propose: "Proponer", autoPaused: "Simulación pausada por sugerencia pendiente.",
+      resumeBtn: "Reanudar", resumed: "Simulación reanudada.",
       stopName: "Escribe el nombre del escenario para confirmar",
       placeholder: "Escribe un mensaje…",
       statusRun: "en ejecución", statusDone: "✔ completado",
@@ -79,12 +180,16 @@
       chipNode: function (n) { return "Explain node " + n; },
       needLogin: "Log in first: use the Login menu in the top bar.",
       needScenario: "I need a scenario to act on. Open one from the Dashboard and we'll talk there: I see the open scenario automatically.",
+      newChat: "Start over (clear this scenario's history)",
+      secScenario: "Scenario",
       degraded: "Note: I'm in degraded mode (no live model).",
       sessionExpired: "Your session expired. Log in again.",
       connFail: "Could not reach the agent. ",
       confirmFail: "Could not confirm the action. Try again.",
       done: "Done: ", failed: "Could not run it: ",
-      confirm: "Confirm", reject: "Dismiss",
+      confirm: "Confirm", reject: "Dismiss", goTo: "Go to new scenario",
+      propose: "Propose", autoPaused: "Simulation paused for pending suggestion.",
+      resumeBtn: "Resume", resumed: "Simulation resumed.",
       stopName: "Type the scenario name to confirm",
       placeholder: "Type a message…",
       statusRun: "running", statusDone: "✔ completed",
@@ -188,10 +293,10 @@
     var ctx = (window.NebulaAgent && window.NebulaAgent.ctx) || {};
     var L = T[locale()];
     var list = [];
-    if (ctx.scenario_status === "completed") list = L.chipsDone.slice(0, 3);
-    else if (ctx.scenario_status === "running") list = L.chipsRun.slice(0, 3);
+    if (ctx.scenario_status === "completed") list = L.chipsDone.slice(0, CHIPS_MAX);
+    else if (ctx.scenario_status === "running") list = L.chipsRun.slice(0, CHIPS_MAX);
     if (ctx.selected_node !== undefined && ctx.selected_node !== null && ctx.selected_node !== "") {
-      list = list.slice(0, 2).concat([L.chipNode(ctx.selected_node)]);
+      list = list.slice(0, Math.max(0, CHIPS_MAX - 1)).concat([L.chipNode(ctx.selected_node)]);
     }
     chipsBox.innerHTML = "";
     if (!list.length) { chipsBox.style.display = "none"; return; }
@@ -246,7 +351,7 @@
     try {
       var saved = localStorage.getItem("nb_chat_mode");
       if (saved) return saved === "docked" && !!slot;
-      return !!slot && window.innerWidth >= 1280;
+      return !!slot && (_mqDock ? _mqDock.matches : window.innerWidth >= BREAKPOINT_DOCK);
     } catch (e) { return false; }
   }
   function applyDock(mode) {
@@ -298,8 +403,8 @@
     head.style.cursor = "move";
     head.addEventListener("pointerdown", function (e) {
       if (e.target.closest("button")) return;
-      if (docked() || window.innerWidth < 1280 && layout) { /* en dock/móvil no se arrastra */ }
-      if (layout && layout.dataset.chat === "docked" && window.innerWidth >= 1280) return;
+      if (docked() || (_mqDock ? !_mqDock.matches : window.innerWidth < BREAKPOINT_DOCK) && layout) { /* en dock/móvil no se arrastra */ }
+      if (layout && layout.dataset.chat === "docked" && (_mqDock ? _mqDock.matches : window.innerWidth >= BREAKPOINT_DOCK)) return;
       var r = chat.getBoundingClientRect();
       chat.style.left = r.left + "px"; chat.style.top = r.top + "px";
       chat.style.right = "auto"; chat.style.bottom = "auto";
@@ -323,12 +428,13 @@
   })();
   restoreFloatPos();
 
-  function addMsg(role, text) {
+  function addMsg(role, text, opts) {
     var el = document.createElement("div");
     el.className = "nb-msg nb-msg--" + role;
     el.textContent = text || "";
     log.appendChild(el);
     log.scrollTop = log.scrollHeight;
+    if (!opts || opts.persist !== false) histPush(activeScenario, role, text);
     return el;
   }
 
@@ -353,6 +459,19 @@
 
   /* Tarjeta de acción con confirmación explícita */
   function addActionCard(action, scenario) {
+    /* Navegación (p. ej. nuevo escenario): sin confirmación, botón directo. */
+    if (action && action.kind === "navigate" && action.params && action.params.url) {
+      var nav = document.createElement("div");
+      nav.className = "nb-msg nb-msg--action";
+      var btn = document.createElement("button");
+      btn.className = "nb-action__confirm";
+      btn.textContent = "→ " + (action.description || t("goTo"));
+      btn.addEventListener("click", function () { window.location.href = action.params.url; });
+      nav.appendChild(btn);
+      log.appendChild(nav);
+      log.scrollTop = log.scrollHeight;
+      return;
+    }
     var card = document.createElement("div");
     card.className = "nb-msg nb-msg--action";
     var title = document.createElement("div");
@@ -396,7 +515,7 @@
   }
 
   function confirmAction(id, confirm, confirmName, card) {
-    fetch("/platform/smac/chat/confirm", {
+    fetch(API.smacConfirm || "/platform/smac/chat/confirm", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
@@ -427,14 +546,14 @@
     var scenario = ctx.scenario_id || currentScenario();
     addMsg("user", message);
     hideChips();
-    if (!scenario) {
+    if (!scenario && !wantsNewScenario(message)) {
       addMsg("agent", t("needScenario"));
       return;
     }
     busy = true;
     setStatus("busy");
     var typing = addTyping();
-    fetch("/platform/smac/chat/", {
+    fetch(API.smacChat || "/platform/smac/chat/", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
@@ -458,9 +577,25 @@
         typing.remove();
         setStatus("offline");
         addMsg("agent", err.message === "auth" ? t("sessionExpired") : t("connFail") + err.message);
-        setTimeout(function () { setStatus("ready"); }, 5000);
+        setTimeout(function () { setStatus("ready"); }, READY_RESET_MS);
       })
       .finally(function () { busy = false; setStatus("ready"); });
+  }
+
+  /* Espejo local de backend wants_new_scenario (el backend revalida):
+     sin escenario abierto, solo la creación viaja al servidor. */
+  function wantsNewScenario(text) {
+    var t = (text || "").toLowerCase();
+    var pats = [
+      /nuev[oa]\s+escenario/, /crea(r)?\s+(un\s+|una\s+|el\s+|otro\s+)?escenario/,
+      /creemos\s+(un\s+)?escenario/, /vamos\s+a\s+crear/,
+      /montar\s+(un\s+)?escenario/, /lanzar\s+(un\s+)?escenario/,
+      /empezar\s+un\s+escenario/, /new\s+scenario/,
+      /creat(e|ing)\s+(a\s+)?(new\s+)?scenario/, /let'?s\s+create\s+(a\s+)?(new\s+)?scenario/,
+      /start\s+a\s+new\s+scenario/
+    ];
+    for (var i = 0; i < pats.length; i++) { if (pats[i].test(t)) return true; }
+    return false;
   }
 
   function submit() {
@@ -483,15 +618,101 @@
     input.style.height = Math.min(input.scrollHeight, 120) + "px";
   });
 
+  /* Sugerencias del agente en el chat (sin salir al panel): se publican vía
+     NebulaAgent.ctx con cada poll; aquí se anuncian una sola vez por id y con
+     botón Proponer (flujo /propose → confirmar/descartar existente). */
+  var seenSugg = {};
+  function suggestionKey(sc, id) { return (sc || "?") + "::" + (id || "?"); }
+  function maybeShowSuggestions() {
+    var ctx = window.NebulaAgent.ctx || {};
+    var sc = ctx.scenario_id || currentScenario();
+    if (!sc) return;
+    var list = Array.isArray(ctx.suggestions) ? ctx.suggestions : [];
+    var fresh = [];
+    list.forEach(function (s) {
+      if (!s) return;
+      var key = suggestionKey(sc, s.id || (s.kind + JSON.stringify(s.params || {})));
+      if (!seenSugg[key]) { seenSugg[key] = true; fresh.push(s); }
+    });
+    if (!fresh.length) return;
+    if (window.NebulaAgent.notify) window.NebulaAgent.notify();
+    fresh.forEach(function (s) {
+      addMsg("agent", "💡 " + (s.title || s.kind) + (s.reason ? " — " + s.reason : ""));
+      var card = document.createElement("div");
+      card.className = "nb-msg nb-msg--action";
+      var btn = document.createElement("button");
+      btn.className = "nb-action__confirm";
+      btn.textContent = t("propose") || "Proponer";
+      btn.addEventListener("click", function () {
+        btn.disabled = true;
+        fetch(API.smacPropose || "/platform/smac/propose", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ scenario: sc, kind: s.kind, params: s.params || {},
+                                 description: (s.title || s.kind) + ": " + (s.reason || "") })
+        })
+          .then(function (res) { return res.json().then(function (d) { return { ok: res.ok, d: d }; }); })
+          .then(function (r) {
+            if (r.ok) addActionCard(r.d, sc);
+            else addMsg("agent", (t("failed") || "No se pudo: ") + (r.d.error || r.d.detail || "…"));
+          })
+          .catch(function () { addMsg("agent", t("confirmFail")); });
+      });
+      card.appendChild(btn);
+      log.appendChild(card);
+      log.scrollTop = log.scrollHeight;
+    });
+  }
+
+  /* Banner de pausa automática con Reanudar (sin salir del chat). */
+  var pauseShownFor = null;
+  function maybeShowPause() {
+    var ctx = window.NebulaAgent.ctx || {};
+    var sc = ctx.scenario_id || currentScenario();
+    if (!sc) return;
+    if (ctx.auto_paused && pauseShownFor !== sc + ":paused") {
+      pauseShownFor = sc + ":paused";
+      if (window.NebulaAgent.notify) window.NebulaAgent.notify();
+      addMsg("agent", "⏸ " + t("autoPaused"));
+      var card = document.createElement("div");
+      card.className = "nb-msg nb-msg--action";
+      var btn = document.createElement("button");
+      btn.className = "nb-action__confirm";
+      btn.textContent = t("resumeBtn") || "Reanudar";
+      btn.addEventListener("click", function () {
+        btn.disabled = true;
+        fetch(API.smacResume || "/platform/smac/resume", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({ scenario: sc })
+        })
+          .then(function () { addMsg("agent", t("resumed") || "Reanudado."); })
+          .catch(function () { addMsg("agent", t("confirmFail")); });
+      });
+      card.appendChild(btn);
+      log.appendChild(card);
+      log.scrollTop = log.scrollHeight;
+    } else if (!ctx.auto_paused) {
+      pauseShownFor = null;
+    }
+  }
+
   /* ---------- puente UI ↔ agente (§5.2) ---------- */
   window.NebulaAgent = window.NebulaAgent || {};
   window.NebulaAgent.ctx = window.NebulaAgent.ctx || {};
   window.NebulaAgent.setContext = function (patch) {
     var prevStatus = (window.NebulaAgent.ctx || {}).scenario_status;
     window.NebulaAgent.ctx = Object.assign({}, window.NebulaAgent.ctx, patch || {});
+    /* Cambio de escenario -> se carga su sección (o se empieza de 0). */
+    if (patch && typeof patch.scenario_id === "string") switchScenario(patch.scenario_id);
     /* La barra de estado se repinta con cualquier parche: el panel publica
        su snapshot cada ~5 s, así el chat refleja el estado en vivo (§2.6). */
     if (patch) renderCtx();
+    /* Sugerencias y pausa en el chat (sin salir al panel). */
+    if (patch && (patch.suggestions !== undefined || patch.auto_paused !== undefined
+        || patch.scenario_id)) {
+      try { maybeShowSuggestions(); maybeShowPause(); } catch (e) {}
+    }
     if (patch && patch.locale) {
       try { localStorage.setItem("nb_locale", patch.locale); } catch (e) {}
       /* Cambio de idioma con el chat abierto: se re-traduce el saludo
@@ -508,6 +729,7 @@
       }
       renderChips();
       input.placeholder = t("placeholder");
+      paintNewBtn();
     }
     /* El panel publica su contexto tras el primer fetch: si el saludo fue
        genérico, se sustituye por el contextual (§2.6). */
@@ -536,5 +758,15 @@
   window.NebulaAgent.notify = function () {
     if (chat.dataset.open !== "true") fab.dataset.notify = "true";
   };
-  window.NebulaChat = { toggle: toggleChat, send: send };
+  window.NebulaChat = { toggle: toggleChat, send: send, switchScenario: switchScenario, clearScenario: clearActiveSection };
+  /* Botón "empezar de 0" + sección inicial según el escenario abierto. */
+  var newBtn = chat.querySelector(".nb-chat__new");
+  function paintNewBtn() {
+    if (!newBtn) return;
+    newBtn.setAttribute("aria-label", t("newChat"));
+    newBtn.title = t("newChat");
+  }
+  if (newBtn) newBtn.addEventListener("click", clearActiveSection);
+  paintNewBtn();
+  switchScenario(currentScenario());
 })();

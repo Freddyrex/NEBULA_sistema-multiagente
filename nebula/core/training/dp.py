@@ -21,8 +21,14 @@ class DifferentialPrivacyPlugin:
         poisson_sampling=True,
         clipping="flat",
     ):
-        # Fixed DP-SGD controls. Epsilon is not configured here; it is computed
-        # from the accountant as the consumed privacy budget after training.
+        # §7: config DP explícita (sin defaults silenciosos en callers: exigir
+        # `training_args.dp`; aquí solo validación). Epsilon se computa del accountant.
+        if float(noise_multiplier) <= 0:
+            raise ValueError(f"DP noise_multiplier debe ser > 0 (got {noise_multiplier})")
+        if float(max_grad_norm) <= 0:
+            raise ValueError(f"DP max_grad_norm debe ser > 0 (got {max_grad_norm})")
+        if float(target_delta) <= 0 or float(target_delta) >= 1:
+            raise ValueError(f"DP target_delta debe estar en (0,1) (got {target_delta})")
         self.noise_multiplier = float(noise_multiplier)
         self.max_grad_norm = float(max_grad_norm)
         self.target_delta = target_delta
