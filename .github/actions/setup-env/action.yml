@@ -1,0 +1,39 @@
+name: "setup-env"
+description: "Set up a Python environment"
+
+permissions:
+  contents: read
+
+inputs:
+  python-version:
+    required: false
+    description: "The version of Python"
+    default: "3.11.7"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up python
+      run: |
+        curl -fsSL https://astral.sh/uv/install.sh -o /tmp/uv-installer.sh
+        chmod +x /tmp/uv-installer.sh
+        /tmp/uv-installer.sh
+        uv python install ${{ inputs.python-version }}
+        uv python pin ${{ inputs.python-version }}
+      shell: bash
+
+    - name: Add uv to Path
+      run: echo "$HOME/.local/bin" >> $GITHUB_PATH
+      shell: bash
+
+    - name: Cache virtual environment
+      id: cache-venv
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-${{ inputs.python-version }}-${{ hashFiles('pyproject.toml', 'uv.lock') }}
+
+    - name: Install dependencies if cache is not hit
+      if: steps.cache-venv.outputs.cache-hit != 'true'
+      run: uv sync
+      shell: bash

@@ -1,0 +1,407 @@
+/* ============================================================
+   NEBULA · Gobernanza de estilo v1.0 (§2–§9)
+   Tokens, tipografía, componentes base y chat flotante.
+   Se carga DESPUÉS de style.css: sus reglas mandan.
+   ============================================================ */
+
+/* ---------- §9.1 Tokens ---------- */
+:root {
+  --nb-navy-900: #1B1F3B;
+  --nb-navy-700: #1F3F6E;
+  --nb-blue-500: #3E7CB1;
+  --nb-blue-300: #4A90C2;
+  --nb-coral-400: #FF8A65;
+  --nb-coral-600: #C4532F;
+
+  --nb-bg: #F7F9FC;
+  --nb-surface: #EEF2F8;
+  --nb-text: #3A3F55;
+  --nb-text-muted: #7C8199;
+  --nb-line: #D9DFEA;
+
+  --nb-ok: #2E9E6B;
+  --nb-warn: #D99A1B;
+  --nb-error: #D64545;
+
+  /* Alias: texto sobre navy. No es un color nuevo de paleta, es el blanco
+     de contraste sobre superficies navy (§10: nada fuera de tokens). */
+  --nb-on-dark: #FFFFFF;
+
+  --nb-font: "JetBrains Mono", "Fira Code", ui-monospace, Menlo, monospace;
+  --nb-shadow-float: 0 8px 24px rgba(27, 31, 59, .14);
+  --nb-ease: cubic-bezier(.2, .8, .2, 1);
+
+  /* §5.3: dimensiones/z-index como tokens (no literales sueltos). */
+  --nb-chat-w: 380px;
+  --nb-topo-h: 480px;
+  --nb-z-chat: 1000;
+  --nb-fab-size: 56px;
+  --nb-info: #3E7CB1;
+  --nb-danger: #ff0000;
+  --nb-muted: #7C8199;
+}
+
+/* Modo oscuro: SOLO opt-in con data-theme="dark" en <html> (§2 v1.1).
+   No se usa prefers-color-scheme hasta migrar todas las superficies a tokens. */
+:root[data-theme="dark"] {
+  --nb-bg: #0F1226;
+  --nb-surface: #171B36;
+  --nb-text: #DDE3F0;
+  --nb-text-muted: #8E95B0;
+  --nb-line: #2A2F52;
+}
+
+body {
+  font-family: var(--nb-font);
+  background: var(--nb-bg);
+  color: var(--nb-text);
+  line-height: 1.6;
+}
+
+:focus-visible {
+  outline: 2px solid var(--nb-coral-400);
+  outline-offset: 2px;
+}
+
+/* ---------- §3 Tipografía (v1.1: H1 fluido, prosa en .nb-prose) ---------- */
+#main h1 {
+  font-size: clamp(1.75rem, 3vw, 2.5rem);
+  font-weight: 500;
+  line-height: 1.15;
+}
+#main h2 { font-size: 1.75rem; font-weight: 500; line-height: 1.25; }
+#main h3 { font-size: 1.25rem; font-weight: 500; line-height: 1.3; }
+/* 72ch solo en contenedor de prosa, nunca en p ni en el hero (§3 v1.1) */
+.nb-prose { max-width: 72ch; }
+/* Todo bloque con max-width y texto centrado lleva margin-inline: auto (§3 v1.1) */
+.nb-center, #main .container { margin-inline: auto; }
+.nb-meta, #main small { font-size: 0.8125rem; line-height: 1.5; color: var(--nb-text-muted); }
+#main code {
+  font-size: 14px;
+  background: var(--nb-surface);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+/* ---------- §4 Contenedor ---------- */
+#main .container { max-width: 1200px; }
+
+/* ---------- §5 Header (80 px, navy, coral activo) ---------- */
+#header {
+  background: var(--nb-navy-900);
+  min-height: 80px;
+  display: flex;
+  align-items: center;
+  padding: 0;
+}
+#header.header-scrolled, #header.header-inner-pages { background: var(--nb-navy-900); }
+#header .logo { font-weight: 500; letter-spacing: 0; }
+.navbar a, .navbar a:focus {
+  text-transform: none; /* sentence case (§3) */
+  font-weight: 500;
+}
+.navbar>ul>li>a:before { background-color: var(--nb-coral-400); height: 2px; }
+.navbar .getstarted, .navbar .getstarted:focus {
+  border-radius: 6px;
+  border: 1.5px solid var(--nb-on-dark);
+  background: transparent;
+}
+.navbar .getstarted:hover, .navbar .getstarted:focus:hover {
+  background: var(--nb-navy-700);
+  border-color: var(--nb-on-dark);
+}
+
+/* ---------- §5 Botones ---------- */
+.nb-btn {
+  font-family: var(--nb-font);
+  border-radius: 6px;
+  padding: 10px 20px;
+  cursor: pointer;
+  transition: background 140ms ease-out, transform 140ms ease-out;
+}
+.nb-btn-primary { background: var(--nb-navy-900); color: var(--nb-on-dark); border: 0; }
+.nb-btn-primary:hover { background: var(--nb-navy-700); }
+.nb-btn-primary:active { transform: translateY(1px); }
+.nb-btn-secondary {
+  background: transparent; color: var(--nb-navy-900);
+  border: 1.5px solid var(--nb-navy-900);
+}
+.nb-btn-secondary:hover { background: var(--nb-surface); }
+/* Primario de la plataforma (btn-dark) alineado a navy */
+.btn-dark {
+  background-color: var(--nb-navy-900);
+  border-color: var(--nb-navy-900);
+  border-radius: 6px;
+}
+.btn-dark:hover, .btn-dark:focus {
+  background-color: var(--nb-navy-700);
+  border-color: var(--nb-navy-700);
+}
+
+/* ---------- §5 Enlaces ---------- */
+#main a:not(.btn):not(.btn-dark):not(.nav-link):not(.getstarted) { color: var(--nb-coral-600); }
+#main a:not(.btn):not(.btn-dark):not(.nav-link):not(.getstarted):hover { text-decoration: underline; }
+
+/* ---------- §5 Inputs ---------- */
+.form-control, textarea.form-control {
+  border: 1px solid var(--nb-line);
+  border-radius: 6px;
+  font-family: var(--nb-font);
+}
+.form-control::placeholder { color: var(--nb-text-muted); }
+.form-control:focus {
+  border-color: var(--nb-coral-400);
+  box-shadow: 0 0 0 3px rgba(255, 138, 101, .25);
+}
+
+/* ---------- §5 Insignias de estado (punto + texto, nunca solo color) ---------- */
+.nb-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 13px; padding: 4px 12px; border-radius: 999px;
+  border: 1px solid var(--nb-line); background: var(--nb-bg); color: var(--nb-text);
+}
+.nb-badge::before { content: ""; width: 8px; height: 8px; border-radius: 999px; background: var(--nb-text-muted); }
+.nb-badge--ok::before { background: var(--nb-ok); }
+.nb-badge--warn::before { background: var(--nb-warn); }
+.nb-badge--error::before { background: var(--nb-error); }
+
+/* ---------- §6 Fondo de red (particles.js retenido como firma) ---------- */
+#particles-js {
+  position: fixed; inset: 0; z-index: 0;
+  pointer-events: none;
+}
+/* Sin z-index aquí a propósito: #main con z-index creaba un stacking context
+   que atrapaba los .modal de Bootstrap por debajo del .modal-backdrop
+   (hijo de body), dejando la pantalla opaca y los botones muertos. */
+#main { position: relative; z-index: auto; }
+
+/* ---------- §9.3 Chat flotante ---------- */
+.nb-fab {
+  position: fixed; right: 24px; bottom: 24px; z-index: 1000;
+  width: 56px; height: 56px; border: 0; border-radius: 999px; cursor: pointer;
+  color: var(--nb-on-dark);
+  background: linear-gradient(135deg, var(--nb-navy-700), var(--nb-blue-300));
+  box-shadow: var(--nb-shadow-float);
+  display: grid; place-items: center;
+  transition: transform 140ms ease-out;
+}
+.nb-fab:hover { transform: scale(1.06); }
+.nb-fab__dot {
+  position: absolute; top: 6px; right: 6px; width: 10px; height: 10px;
+  border-radius: 999px; background: var(--nb-ok); border: 2px solid var(--nb-bg);
+}
+.nb-fab[data-notify="true"] .nb-fab__dot { background: var(--nb-coral-400); }
+.nb-fab[data-open="true"] .nb-fab__icon { transform: rotate(90deg); }
+.nb-fab__icon { transition: transform 160ms ease-out; }
+
+.nb-chat {
+  position: fixed; right: 24px; bottom: 96px; z-index: 1000;
+  width: 380px; height: min(560px, calc(100vh - 120px));
+  display: flex; flex-direction: column;
+  background: var(--nb-bg); color: var(--nb-text);
+  border: 1px solid var(--nb-line); border-radius: 16px;
+  box-shadow: var(--nb-shadow-float);
+  transform-origin: bottom right;
+  opacity: 0; transform: translateY(12px) scale(.98);
+  transition: opacity 240ms var(--nb-ease), transform 240ms var(--nb-ease);
+  font-family: var(--nb-font);
+}
+.nb-chat[data-open="true"] { opacity: 1; transform: none; }
+.nb-chat[hidden] { display: none; }
+
+.nb-chat__head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px; background: var(--nb-navy-900); color: var(--nb-on-dark);
+  border-radius: 16px 16px 0 0;
+}
+.nb-chat__status { width: 8px; height: 8px; border-radius: 999px; background: var(--nb-ok); flex: none; }
+.nb-chat__status[data-state="busy"] { background: var(--nb-coral-400); }
+.nb-chat__status[data-state="offline"] { background: var(--nb-error); }
+.nb-chat__head strong { flex: 1; font-weight: 500; font-size: 14px; }
+.nb-chat__close { background: none; border: 0; color: var(--nb-on-dark); font-size: 20px; cursor: pointer; line-height: 1; }
+.nb-chat__dock {
+  background: none; border: 0; color: var(--nb-on-dark); font-size: 15px;
+  cursor: pointer; line-height: 1; padding: 2px 6px; border-radius: 6px;
+}
+.nb-chat__dock:hover { background: rgba(255, 255, 255, .12); }
+.nb-chat__dock[hidden] { display: none; }
+.nb-chat__new {
+  background: none; border: 0; color: var(--nb-on-dark); font-size: 15px;
+  cursor: pointer; line-height: 1; padding: 2px 6px; border-radius: 6px;
+}
+.nb-chat__new:hover { background: rgba(255, 255, 255, .12); }
+/* Separador de sección por escenario dentro del historial */
+.nb-sec {
+  align-self: center; font-size: 12px; color: var(--nb-text-muted);
+  background: var(--nb-surface); border: 1px solid var(--nb-line);
+  border-radius: 999px; padding: 2px 12px; margin: 2px 0 6px;
+}
+/* Continuidad del hilo: el chat sigue del escenario anterior */
+.nb-sec--carry {
+  color: var(--nb-info);
+  border-style: dashed;
+  border-color: var(--nb-info);
+}
+
+.nb-chat__log { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+
+/* Estado del escenario dentro del chat (§2.6): el chat nunca es una caja
+   de texto sin contexto, siempre dice en qué estado está la simulación. */
+.nb-chat__ctx {
+  flex: none; padding: 10px 16px; background: var(--nb-surface);
+  border-bottom: 1px solid var(--nb-line); font-size: 12.5px; line-height: 1.5;
+}
+.nb-chat__ctx[hidden] { display: none; }
+.nb-ctx__top { display: flex; align-items: center; gap: 8px; }
+.nb-ctx__status { font-size: 12px; padding: 2px 10px; flex: none; }
+.nb-ctx__status[data-state="done"]::before { background: var(--nb-ok); }
+.nb-ctx__status[data-state="running"]::before { background: var(--nb-ok); animation: nb-pulse 1.6s ease-in-out infinite; }
+.nb-ctx__status[data-state="unknown"]::before { background: var(--nb-warn); }
+.nb-ctx__name {
+  flex: 1; min-width: 0; font-size: 12px; color: var(--nb-text-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.nb-ctx__meta { margin-top: 6px; color: var(--nb-text-muted); overflow-wrap: anywhere; }
+@keyframes nb-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+.nb-msg { max-width: 85%; padding: 10px 14px; font-size: 14px; animation: nb-in 180ms ease-out; overflow-wrap: break-word; white-space: pre-wrap; line-height: 1.45; }
+.nb-msg--agent { align-self: flex-start; background: var(--nb-surface); border-radius: 12px 12px 12px 4px; }
+.nb-msg--user  { align-self: flex-end; background: var(--nb-navy-900); color: var(--nb-on-dark); border-radius: 12px 12px 4px 12px; }
+.nb-msg--action { border-left: 3px solid var(--nb-coral-400); border-radius: 6px; background: var(--nb-surface); align-self: flex-start; }
+.nb-msg pre {
+  /* Fondo/texto fijados por la §8 (bloques de código del chat), no tokens. */
+  background: #0F1226; color: #DDE3F0; border-radius: 6px;
+  padding: 8px 10px; font-size: 13px; overflow-x: auto; margin: 8px 0 0;
+}
+.nb-msg--typing { display: inline-flex; gap: 4px; }
+.nb-msg--typing span { animation: nb-blink 1.2s infinite; }
+.nb-msg--typing span:nth-child(2) { animation-delay: .2s; }
+.nb-msg--typing span:nth-child(3) { animation-delay: .4s; }
+@keyframes nb-blink { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+@keyframes nb-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+.nb-action__btns { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.nb-action__btns button {
+  font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 6px; cursor: pointer;
+}
+.nb-action__confirm { background: var(--nb-navy-900); color: var(--nb-on-dark); border: 0; }
+.nb-action__confirm:hover { background: var(--nb-navy-700); }
+.nb-action__confirm:disabled { opacity: .5; cursor: default; }
+.nb-action__reject { background: transparent; border: 1px solid var(--nb-line); color: var(--nb-text); }
+.nb-action__line { font-size: 13px; margin-top: 6px; color: var(--nb-text); }
+.nb-action__line.text-warning { color: #9a6700; }
+.nb-action__line.text-danger { color: #b42318; }
+.nb-action__line.text-success { color: #1a7f37; }
+.nb-action__name {
+  font: inherit; font-size: 13px; width: 100%; margin-top: 8px; padding: 6px 10px;
+  border: 1px solid var(--nb-line); border-radius: 6px; background: var(--nb-bg); color: var(--nb-text);
+}
+
+.nb-chat__chips { display: flex; gap: 8px; flex-wrap: wrap; padding: 0 16px 12px; }
+.nb-chip {
+  font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 999px;
+  background: transparent; color: var(--nb-text); border: 1px solid var(--nb-line); cursor: pointer;
+  transition: border-color 140ms ease-out;
+}
+.nb-chip:hover { border-color: var(--nb-coral-400); }
+
+.nb-chat__input { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--nb-line); }
+.nb-chat__input textarea {
+  flex: 1; resize: none; font: inherit; font-size: 14px; padding: 10px 12px;
+  color: var(--nb-text); background: var(--nb-bg);
+  border: 1px solid var(--nb-line); border-radius: 6px;
+}
+.nb-chat__input textarea:focus { outline: none; border-color: var(--nb-coral-400); box-shadow: 0 0 0 3px rgba(255,138,101,.25); }
+.nb-chat__send { border: 0; border-radius: 6px; padding: 0 14px; color: var(--nb-on-dark); background: var(--nb-navy-900); cursor: pointer; font-size: 16px; }
+.nb-chat__send:hover { background: var(--nb-navy-700); }
+
+@media (max-width: 640px) {
+  .nb-fab { right: 16px; bottom: 16px; }
+  .nb-chat { inset: 0; width: auto; height: auto; border-radius: 0; border: 0; }
+  .nb-chat__head { border-radius: 0; }
+}
+
+/* ---------- §7 Movimiento: solo transform/opacity + reduced-motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .nb-fab, .nb-chat, .nb-msg, .nb-chip, .nb-btn { transition: none; animation: none; }
+  .nb-msg--typing span { animation: none; opacity: 1; }
+  .nb-ctx__status[data-state="running"]::before { animation: none; }
+  #particles-js { display: none; }
+}
+
+/* ============================================================
+   SMAC Panel · mejoras Fase 0 (NEBULA_SMAC_PANEL_IMPROVEMENTS.md §2)
+   ============================================================ */
+
+/* ---------- §2.1 Chat acoplable: tercera columna, no tapa controles (D1) ---------- */
+.smac-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.smac-layout[data-chat="docked"] {
+  grid-template-columns: minmax(0, 1fr) 380px;
+}
+/* En modo acoplado el chat deja de ser fixed y pasa a ser una columna lateral
+   que acompaña el scroll (sticky con recorrido: la columna se estira a la
+   altura de la fila para que el chat viaje sin tapar el contenido). */
+.smac-layout[data-chat="docked"] {
+  align-items: stretch;
+}
+.smac-layout[data-chat="docked"] #smac-chat-slot:not([hidden]) {
+  position: relative;
+  min-height: 420px;
+}
+.smac-layout[data-chat="docked"] .nb-chat {
+  position: sticky; top: 24px; right: auto; bottom: auto;
+  height: calc(100vh - 120px); max-height: calc(100vh - 48px); width: auto;
+}
+#smac-chat-slot[hidden] { display: none; }
+#smac-chat-slot:not([hidden]) { min-height: 200px; }
+/* Con el chat acoplado, el FAB se oculta */
+body.nb-chat-docked #nb-chat-fab { display: none; }
+/* Acoplado = columna siempre visible: sin botón de cerrar (⛶ para soltar) */
+body.nb-chat-docked .nb-chat__close { display: none; }
+/* Breakpoint dock: 1280px en JS (matchMedia min-width:1280px, NebulaConfig.
+   breakpointDock) y aquí max-width:1279px = 1280-1 (off-by-one intencional
+   y documentado, no divergencia). */
+@media (max-width: 1279px) {
+  /* Por debajo de 1280 px el chat es hoja inferior (visible y cerrable),
+     nunca overlay a pantalla completa que tape el panel. */
+  .smac-layout[data-chat="docked"] { grid-template-columns: minmax(0, 1fr); }
+  .smac-layout[data-chat="docked"] .nb-chat {
+    position: fixed; left: 16px; right: 16px; bottom: 16px; top: auto;
+    width: auto; height: auto; max-height: 70vh;
+  }
+  body.nb-chat-docked .nb-chat__close { display: inline-flex; }
+  body.nb-chat-docked #nb-chat-fab { display: grid; }
+}
+
+/* ---------- §2.4 Controles secundarios con punto de color (D12) ---------- */
+.smac-ctl {
+  border: 1.5px solid var(--nb-navy-900);
+  background: transparent;
+  color: var(--nb-navy-900);
+  border-radius: 6px;
+  display: inline-flex; align-items: center;
+}
+.smac-ctl:hover:not(:disabled) { background: var(--nb-surface); }
+.smac-ctl .smac-dot {
+  width: 8px; height: 8px; border-radius: 999px;
+  display: inline-block; margin-right: 6px; flex: none;
+}
+.smac-ctl:disabled { opacity: .55; }
+
+/* Insignia neutra para ronda/algoritmo (el resto usa .nb-badge--ok/warn/error) */
+#smac-round, #smac-algo { font-weight: 400; }
+
+/* ---------- SMAC topología: nunca colapsada ni en blanco ---------- */
+#smac-topo {
+  display: block;
+  width: 100%;
+  min-height: 480px;
+  height: 480px;
+  background: var(--nb-bg, #fff);
+}
+.smac-node { cursor: pointer; }
+.smac-node:focus-visible { outline: 2px solid var(--nb-blue-500, #3E7CB1); outline-offset: 2px; }

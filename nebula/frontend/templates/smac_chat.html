@@ -1,0 +1,206 @@
+{% extends "layout.html" %}
+{% block body %}
+<div class="container-fluid mt-3" style="max-width: 1400px;">
+    <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+        <h4 class="mb-0"><i class="bi bi-activity"></i> <span data-i18n="title">SMAC Panel</span></h4>
+        <span class="text-muted small" data-i18n="subtitle">cognitive observability & interactive control</span>
+        <div class="input-group ms-2" style="max-width: 480px;">
+            <span class="input-group-text" data-i18n="scenario">Scenario</span>
+            <input id="smac-scenario" type="text" class="form-control form-control-sm"
+                placeholder="nebula_DFL_..." value="{{ scenario_name | safe }}" title="{{ scenario_name | safe }}">
+            <button id="smac-copy" class="btn btn-sm btn-outline-secondary" type="button"
+                data-i18n-aria="copyId" aria-label="Copy scenario id" title="Copiar id">⧉</button>
+            <button id="smac-load" class="btn btn-sm btn-dark" data-i18n="load">Load</button>
+        </div>
+        <span id="smac-status" class="nb-badge">—</span>
+        <span id="smac-round" class="nb-badge">round —</span>
+        <span id="smac-algo" class="nb-badge">—</span>
+        <span id="smac-counts" class="small text-muted ms-auto"></span>
+        <button id="smac-refresh-toggle" class="btn btn-sm btn-outline-secondary" role="switch" aria-checked="true">auto: on</button>
+        <button id="smac-lang" class="btn btn-sm btn-outline-secondary" type="button" aria-label="Switch language / Cambiar idioma">ES</button>
+    </div>
+
+    <div class="smac-layout" id="smac-layout" data-chat="float">
+    <div class="smac-main">
+    <div class="row g-2">
+        <!-- Topology -->
+        <div class="col-lg-7">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fa fa-share-alt me-1"></i>Federation topology <small class="text-muted">(live)</small></span>
+                    <small id="smac-topo-hint" class="text-muted">click a node to inspect & control</small>
+                </div>
+                <div class="card-body p-1">
+                    <svg id="smac-topo" width="100%" height="480" viewBox="0 0 600 480" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Federation topology"></svg>
+                    <div class="d-flex gap-3 px-2 pb-1 small text-muted flex-wrap">
+                        <span><span class="dot" style="background:var(--nb-ok)"></span> <span data-i18n="lgRun">running</span></span>
+                        <span><span class="dot" style="background:var(--nb-warn)"></span> <span data-i18n="lgPaused">paused</span></span>
+                        <span><span class="dot" style="background:var(--nb-blue-500)"></span>✓ <span data-i18n="lgFinished">finished</span></span>
+                        <span><span class="dot" style="background:var(--nb-text-muted)"></span> <span data-i18n="lgOff">offline/stopped</span></span>
+                        <span><span class="dot" style="background:var(--nb-error)"></span>⚠ <span data-i18n="lgMal">malicious</span></span>
+                        <span><span class="dot dot-ring"></span> <span data-i18n="lgStrag">predicted straggler</span></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Control -->
+        <div class="col-lg-5">
+            <div class="card mb-2">
+                <div class="card-header"><i class="fa fa-sliders me-1"></i><span data-i18n="control">Control</span>
+                    <small id="smac-selected" class="text-muted ms-1">no node selected</small>
+                </div>
+                <div class="card-body p-2">
+                    <div class="d-flex gap-2 flex-wrap mb-2">
+                        <button id="smac-pause" class="btn btn-sm smac-ctl" disabled><span class="smac-dot" style="background:var(--nb-warn)"></span><span data-i18n="pause">Pause node</span></button>
+                        <button id="smac-resume" class="btn btn-sm smac-ctl" disabled><span class="smac-dot" style="background:var(--nb-ok)"></span><span data-i18n="resume">Resume node</span></button>
+                        <select id="smac-algo-select" class="form-select form-select-sm" style="max-width: 150px;" disabled>
+                            <option>FedAvg</option><option>Krum</option><option>Median</option><option>TrimmedMean</option>
+                        </select>
+                        <button id="smac-apply-algo" class="btn btn-sm btn-outline-dark" disabled><span data-i18n="switchAgg">Switch aggregator</span></button>
+                    </div>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <select id="smac-peer" class="form-select form-select-sm" style="max-width: 170px;" disabled>
+                            <option value="">peer…</option>
+                        </select>
+                        <button id="smac-disconnect" class="btn btn-sm btn-outline-danger" disabled><span data-i18n="disconnect">Propose disconnect</span></button>
+                        <button id="smac-stop" class="btn btn-sm btn-danger ms-auto"><span data-i18n="stop">Stop scenario</span></button>
+                    </div>
+                    <div id="smac-pending"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Hallazgos del exec-interpreter (deterministas, sin LLM).
+         Sprint 2: se renderizan desde el state (no requieren Groq); vacíos si la
+         bandera adaptive_agent.exec_interpreter de scenario.json está apagada. -->
+    <div class="row g-2 mt-1" id="smac-findings">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fa fa-search me-1"></i><span data-i18n="findingsTitle">Hallazgos</span></span>
+                    <small id="smac-findings-count" class="text-muted"></small>
+                </div>
+                <div class="card-body p-2">
+                    <div id="smac-findings-list" class="smac-findings-list">
+                        <div class="small text-muted" id="smac-findings-empty">sin hallazgos</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Verificaciones post-cambio (Sprint 7: proyectado vs medido). -->
+    <div class="row g-2 mt-1" id="smac-verifications">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <span><i class="fa fa-check me-1"></i><span data-i18n="verifTitle">Verificaciones</span></span>
+                </div>
+                <div class="card-body p-2">
+                    <div id="smac-verifications-list" class="smac-verifications-list">
+                        <div class="small text-muted" id="smac-verifications-empty">sin verificaciones</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Linaje de ejecuciones padre → hijo (Sprint 6: resume_from). -->
+    <div class="row g-2 mt-1" id="smac-lineage">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <span><i class="fa fa-link me-1"></i><span data-i18n="lineageTitle">Linaje</span></span>
+                </div>
+                <div class="card-body p-2">
+                    <div id="smac-lineage-list" class="smac-lineage-list">
+                        <div class="small text-muted" id="smac-lineage-empty">sin ejecuciones enlazadas</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Sugerencias del agente adaptativo (Sprint 3: p. ej. cambiar FedAvg → Krum).
+         El botón propone por el flujo existente (pendiente con Aceptar/Rechazar);
+         nada se ejecuta solo. -->
+    <div class="row g-2 mt-1" id="smac-suggestions">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fa fa-lightbulb-o me-1"></i><span data-i18n="suggTitle">Sugerencias</span></span>
+                    <small id="smac-suggestions-count" class="text-muted"></small>
+                </div>
+                <div class="card-body p-2">
+                    <div id="smac-suggestions-list" class="smac-suggestions-list">
+                        <div class="small text-muted" id="smac-suggestions-empty">sin sugerencias</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Métricas observadas (desplegables first/final/delta/best; curvas en Tiempo real).
+         Sprint 1: incluye f1_macro/recall_macro/precision_macro + cpu_percent/ram_percent/cpu_temp.
+         cpu_temp solo con sensor real; si no, cpu_temp_est (estimado ARX) o no disponible. -->
+    <div class="row g-2 mt-1" id="smac-metrics">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fa fa-bar-chart me-1"></i><span data-i18n="metricsTitle">Métricas</span></span>
+                    <span class="d-flex align-items-center gap-2">
+                        <small id="smac-metrics-count" class="text-muted"></small>
+                        <a id="smac-realtime-btn" href="#" class="btn btn-sm btn-outline-dark disabled" title="Real-time metrics">
+                            <i class="fa fa-line-chart me-1"></i><span data-i18n="goRealtime">Tiempo real</span>
+                        </a>
+                    </span>
+                </div>
+                <div class="card-body p-2">
+                    <div id="smac-metrics-list" class="smac-metrics-list">
+                        <div class="small text-muted" id="smac-metrics-empty">sin datos</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    </div>
+    <div id="smac-chat-slot" hidden></div>
+    </div>
+</div>
+<script>window.NebulaRole = "{{ user_role }}";</script>
+<script src="{{ url_for('static', path='js/nebula-config.js') }}?v={{ static_v }}"></script>
+<script src="{{ url_for('static', path='js/smac-chat.js') }}?v={{ static_v }}"></script>
+<style>
+    .navbar { margin-bottom: 0; }
+    .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
+    .dot-ring { border: 3px solid #fd7e14; background: transparent; width: 12px; height: 12px; }
+    .smac-node { cursor: pointer; }
+    .smac-node.dim { opacity: 0.25; }
+    .smac-edge.dim { opacity: 0.12; }
+    .smac-card { border: 1px solid #dee2e6; border-radius: 8px; padding: 6px 8px; margin-bottom: 6px; font-size: 0.85rem; background: white; }
+    .smac-card.hl { border-color: #0d6efd; box-shadow: 0 0 0 1px #0d6efd; }
+    .smac-card.dim { opacity: 0.45; }
+    .smac-card p { margin: 0 0 4px 0; }
+    .smac-card ul, .smac-card ol { margin: 0 0 4px 0; padding-left: 20px; }
+    .smac-card li { margin-bottom: 2px; }
+    .smac-h { font-weight: 700; margin: 6px 0 2px 0; }
+    .smac-card code { background: #f1f3f5; border-radius: 4px; padding: 0 4px; font-size: 0.8rem; }
+    .confbar { height: 4px; background: #e9ecef; border-radius: 2px; margin-top: 4px; }
+    .confbar > div { height: 100%; background: #0d6efd; border-radius: 2px; }
+    .smac-target { cursor: pointer; }
+    .smac-metrics-list details { border: 1px solid #dee2e6; border-radius: 8px; margin-bottom: 6px; background: white; }
+    .smac-metrics-list summary { cursor: pointer; padding: 6px 10px; font-size: 0.85rem; list-style: none; display: flex; justify-content: space-between; gap: 8px; }
+    .smac-metrics-list summary::-webkit-details-marker { display: none; }
+    .smac-metrics-list summary::before { content: "▸"; color: #7C8199; }
+    .smac-metrics-list details[open] summary::before { content: "▾"; }
+    .smac-metrics-list .smac-m-body { padding: 0 10px 8px 24px; font-size: 0.8rem; color: #495057; }
+    .smac-findings-list .smac-finding { border: 1px solid #dee2e6; border-radius: 8px; margin-bottom: 6px; background: white; padding: 6px 10px; font-size: 0.85rem; }
+    .smac-findings-list .smac-f-head { display: flex; gap: 8px; align-items: center; }
+    .smac-findings-list .smac-sev { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; border-radius: 4px; padding: 0 6px; background: #e9ecef; color: #495057; }
+    .smac-findings-list .smac-finding--warning .smac-sev { background: #fff3cd; color: #664d03; }
+    .smac-findings-list .smac-finding--critical .smac-sev { background: #f8d7da; color: #842029; }
+    .smac-findings-list .smac-finding--info .smac-sev { background: #cfe2ff; color: #084298; }
+    .smac-findings-list .smac-f-body { font-size: 0.8rem; color: #212529; margin-top: 2px; }
+    .smac-findings-list .smac-f-meta { font-size: 0.75rem; color: #6c757d; }
+</style>
+{% endblock %}
+
+{% block footer %}
+{% endblock %}

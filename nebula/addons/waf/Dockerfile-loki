@@ -1,0 +1,4 @@
+ARG BASE_IMAGE=grafana/loki:3.2.0
+FROM ${BASE_IMAGE}
+
+COPY loki-config.yml /mnt/config/loki-config.yml

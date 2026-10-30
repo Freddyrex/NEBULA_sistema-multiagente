@@ -1,0 +1,9 @@
+ARG BASE_IMAGE=grafana/promtail:3.2.0
+FROM ${BASE_IMAGE}
+
+ARG USER
+ENV USER=${USER}
+
+COPY promtail-config.yml /etc/promtail/config.yml
+
+RUN sed -i "s|http://nebula|http://$USER|g" /etc/promtail/config.yml

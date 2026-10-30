@@ -1,0 +1,112 @@
+site_name: NEBULA
+docs_dir: '_prebuilt'
+repo_url: https://github.com/CyberDataLab/nebula
+site_url: https://docs.nebula-dfl.com
+site_description: "NEBULA: A Platform for Decentralized Federated Learning"
+site_author: Enrique Tomás Martínez Beltrán, Alberto Huertas Celdrán, Fernando Torres Vega, Juan Jesús Torralba Mateos
+edit_uri: edit/main/docs/
+repo_name: CyberDataLab/nebula
+copyright: Currently developed by <a href="https://enriquetomasmb.com">Enrique Tomás Martínez Beltrán</a>, Alberto Huertas Celdrán, Fernando Torres Vega, and Juan Jesús Torralba Mateos - Source code (AGPL-3.0)
+
+nav:
+  - Home: index.md
+  - Installation: installation.md
+  - User Guide: userguide.md
+  - Developer Guide: developerguide.md
+  - Cognitive Agents (SMAC): smac.md
+  - API Reference: api/
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths:
+            - ../
+          options:
+            docstring_style: google
+            show_source: true
+  - gen-files:
+      scripts:
+      - scripts/gen_ref_pages.py
+  - literate-nav:
+      nav_file: SUMMARY.md
+  - section-index
+  - autorefs
+  - git-revision-date-localized
+theme:
+  name: material
+  feature:
+    tabs: true
+  features:
+    - navigation.tabs
+    - content.code.annotate
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: deep orange
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: deep orange
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  icon:
+    repo: fontawesome/brands/github
+    edit: material/pencil
+    prev: material/keyboard_arrow_left
+    next: material/keyboard_arrow_right
+    release: fontawesome/solid/rocket
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/CyberDataLab/nebula
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/nebula-dfl
+    - icon: material/email
+      link: mailto:enriquetomas@um.es
+  meta:
+    - name: description
+      content: "NEBULA: A Platform for Decentralized Federated Learning"
+    - name: keywords
+      content: "NEBULA, Fedstellar, Federated Learning, Decentralized Federated Learning, Machine Learning, Privacy, Security, Trustworthiness AI"
+    - name: author
+      content: "Enrique Tomás Martínez Beltrán"
+    - name: robots
+      content: "index, follow"
+  generator: false
+
+extra_css:
+  - css/toc.css
+
+extra_javascript:
+  - js/toc.js
+
+markdown_extensions:
+  - toc:
+      permalink: true
+      toc_depth: 6
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.magiclink
+  - pymdownx.details # Allowing hidden expandable regions denoted by ???
+  # pymdownx.highlight removido: incompatible con pymdown-extensions>=10.2
+  # (mkdocstrings intentaba Highlight() sin arg 'md' -> TypeError). Material
+  # ya resalta via superfences/inlinehilite.
+  - pymdownx.inlinehilite
+  - pymdownx.superfences # Seems to enable syntax highlighting when used with the Material theme.
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.snippets:
+      check_paths: true
+  - admonition
+  - footnotes
+  - codehilite
+  - attr_list

@@ -1,0 +1,206 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Data escenarios reputation
+nebula/core/reputation/nebula_DFL_*
+
+# File uv.lock
+uv.lock
+
+# Distribution / packaging
+.Python
+docs/build/
+develop-eggs/
+dist/
+downloads/
+analysis/addons
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
+#   However, in case of collaboration, if having platform-specific dependencies or dependencies
+#   having no cross-platform support, pipenv may install dependencies that don't work, or not
+#   install all needed dependencies.
+#Pipfile.lock
+
+# PEP 582; used by e.g. github.com/David-OConnor/pyflow
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.env.*
+!.env.example
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# uv
+.venv/
+!uv.lock
+
+# mkdocs documentation
+/site
+_build/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ruff
+.ruff/
+.ruff_cache/
+
+# Pyre type checker
+.pyre/
+
+.idea/
+_build/
+*.DS_Store
+# App de despliegue: se versiona solo el codigo, no los datos ni el runtime
+app/*
+!app/__init__.py
+!app/main.py
+!app/deployer.py
+*.yaml
+!nebula/frontend/interpreter_thresholds.yaml
+!nebula/frontend/metrics/tags.yaml
+!docs/mkdocs.yml
+!.pre-commit-config.yaml
+data/
+*.db*
+*.out
+*.pid
+
+.requirements.txt
+data-analysis/
+network-analysis/
+!docker-compose.yml
+
+# SMAC: Gemini API key file (secret, never commit)
+apikey
+gemini_apikey
+
+# Excluir documentación markdown del repo destino
+*.md
+
+# Excepción: fuentes mínimas para que MkDocs/CI construya (nav de docs/mkdocs.yml)
+!docs/_prebuilt/index.md
+!docs/_prebuilt/installation.md
+!docs/_prebuilt/userguide.md
+!docs/_prebuilt/developerguide.md
+!docs/_prebuilt/smac.md
+
+# Excepciones de documentación mínima para packaging/landing
+!README.md
+!CHANGELOG.md
+
+# ADR y guía operativa de la capa multiagente (sí se versionan)
+!docs/adr/
+!docs/adr/*.md
+!docs/agentic-crew.md
+
+# Capa de API / seguridad: versionada (contiene RBAC, JWT y validación; sin credenciales fijas)
+
+# Excluidos a petición: postman + informe workshop5 (se conservan en disco)
+NEBULA-Sesion.postman_collection.json
+NEBULA-Sesion.postman_environment.json
+informe_workshop5.tex
+
+# Secrets / certificates (never commit)
+*.pem
+*.key
+*.p12
+*.pfx

@@ -1,0 +1,1595 @@
+{% extends "layout.html" %}
+{% block body %}
+<div class="overlay"></div>
+{{ super() }}
+
+<link rel="stylesheet" href="{{ url_for('static', path='css/deployment.css') }}">
+
+<section id="home" class="home">
+    <div class="container" style="text-align: center">
+        <h1 class="logo" style="text-align: center">Deployment</h1>
+        <p style="text-align: center" class="fst-italic">Deploy scenarios using NEBULA</p>
+    </div>
+</section>
+
+<!-- Modal participant -->
+<div class="modal fade" id="participant-modal" tabindex="-1" role="dialog" aria-labelledby="participant-modal-title"
+    aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="participant-modal-title">Participant Details</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="participant-modal-content"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal confirm -->
+<div class="modal fade" id="confirm-modal" tabindex="-1" aria-labelledby="confirm-modal-title" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="confirm-modal-title">Confirm the deployment of the defined scenario</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div id="confirm-modal-body" class="modal-body"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">No</button>
+                <button type="button" id="yes-button" class="btn btn-dark" data-bs-dismiss="modal">Yes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Model info -->
+<div class="modal fade" id="info-modal" tabindex="-1" aria-labelledby="info-modal-title" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="info-modal-title">Information</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="info-modal-body"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-dark" data-bs-dismiss="modal">Understand</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Generate Scenarios -->
+<div class="modal fade" id="gen-modal" tabindex="-1" aria-labelledby="exampleModalLabel-modal-title" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="exampleModalLabel">Scenario Generation</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="info-modal-body">
+                <form>
+                    <h5>Advanced Deployment <i class="fa fa-cloud-upload"></i></h5>
+                    <div style="display: inline-block;">
+                        <label style="display: inline-block; align-items: center; margin-bottom: 10px;">
+                            <input type="radio" id="mod-cpu" name="adv-deployment" value="cpu"
+                                style="margin-right: 10px;" checked>CPU
+                        </label>
+                        <label style="display: inline-block; align-items: center; margin-bottom: 10px;">
+                            <input type="radio" id="mod-gpu" name="adv-deployment" value="gpu"
+                                style="margin-right: 10px; margin-left: 10px;">GPU
+                        </label>
+                    </div>
+                    <hr>
+                    <h5>Aggregation <i class="fa fa-calculator"></i>
+                        <input type="checkbox" id="mod-aggregation" style="margin-right: 10px; float: left;">
+                    </h5>
+                    <div style="display: inline-block;">
+                        <label style="display: inline-block; align-items: center; margin-bottom: 10px;">
+                            <input type="checkbox" id="mod-fedavg" value="FedAvg" style="margin-right: 10px;"
+                                checked>FedAvg
+                        </label>
+                        <label style="display: inline-block; align-items: center; margin-bottom: 10px;">
+                            <input type="checkbox" id="mod-krum" value="Krum"
+                                style="margin-right: 10px; margin-left: 10px;">Krum
+                        </label>
+                        <label style="display: inline-block; align-items: center; margin-bottom: 10px;">
+                            <input type="checkbox" id="mod-trimmed" value="TrimmedMean"
+                                style="margin-right: 10px; margin-left: 10px;">TrimmedMean
+                        </label>
+                        <label style="display: inline-block; align-items: center; margin-bottom: 10px;">
+                            <input type="checkbox" id="mod-median" value="Median"
+                                style="margin-right: 10px; margin-left: 10px;">Median
+                        </label>
+                    </div>
+                    <hr>
+                    <h5>Topology <i class="fa fa-sitemap"></i>
+                        <input type="checkbox" id="mod-topology" style="margin-right: 10px; float: left;">
+                    </h5>
+                    <div style="display: inline-block; white-space: nowrap;">
+                        <label style="display: inline-block; align-items: center; margin-bottom: 10px;">
+                            <input type="checkbox" id="mod-fully" value='Fully' style="margin-right: 10px;"
+                                checked>Fully
+                        </label>
+                        <label style="display: inline-block; align-items: center; margin-bottom: 10px;">
+                            <input type="checkbox" id="mod-ring" value='Ring'
+                                style="margin-right: 10px; margin-left: 10px;">Ring
+                        </label>
+                        <label style="display: inline-block; align-items: center; margin-bottom: 10px;">
+                            <input type="checkbox" id="mod-star" value='Star'
+                                style="margin-right: 10px; margin-left: 10px;">Star
+                        </label>
+                        <input type="number" id="mod-topology-nodes" placeholder="Nodes" oninput="greaterThan0(this)"
+                            style="display: inline; width: 15%; margin-left: 10px;">
+                        <input type="number" id="mod-topology-increment" placeholder="Increment"
+                            oninput="greaterThan0(this)" style="display: inline; width: 21%; margin-left: 0px;">
+                        <input type="number" id="mod-topology-iterations" placeholder="Iterations"
+                            oninput="greaterThan0(this)" style="display: inline; width: 20%; margin-left: 0px;">
+                    </div>
+                    <hr>
+                    <h5>Dataset <i class="fa fa-database"></i>
+                        <input type="checkbox" id="mod-dataset" style="margin-right: 10px; float: left;">
+                    </h5>
+                    <div style="display: inline-block;">
+                        <label style="display: inline-block; align-items: center; margin-bottom: 10px;">
+                            <input type="checkbox" id="mod-mnist" value='MNIST' style="margin-right: 10px;"
+                                checked>MNIST
+                        </label>
+                        <label style="display: inline-block; align-items: center; margin-bottom: 10px;">
+                            <input type="checkbox" id="mod-fmnist" value='FashionMNIST'
+                                style="margin-right: 10px; margin-left: 10px;">FashionMNIST
+                        </label>
+                        <label style="display: inline-block; align-items: center; margin-bottom: 10px;">
+                            <input type="checkbox" id="mod-fmnist" value='Covtype'
+                                style="margin-right: 10px; margin-left: 10px;">Covtype
+                        </label>
+                        <label style="display: inline-block; align-items: center; margin-bottom: 10px;">
+                            <input type="checkbox" id="mod-fmnist" value='KDDCUP99'
+                                style="margin-right: 10px; margin-left: 10px;">KDDCUP99
+                        </label>
+                        <label style="display: inline-block; align-items: center; margin-bottom: 10px;">
+                            <input type="checkbox" id="mod-fmnist" value='AdultCensus'
+                                style="margin-right: 10px; margin-left: 10px;">AdultCensus
+                        </label>
+                        <label style="display: inline-block; align-items: center; margin-bottom: 10px;">
+                            <input type="checkbox" id="mod-fmnist" value='BreastCancer'
+                                style="margin-right: 10px; margin-left: 10px;">BreastCancer
+                        </label>
+                        <label style="display: inline-block; align-items: center; margin-bottom: 10px;">
+                            <input type="checkbox" id="mod-cifar10" value='CIFAR10'
+                                style="margin-right: 10px; margin-left: 10px;">CIFAR10
+                        </label>
+                    </div>
+                    <hr>
+                    <h5>Robustness <i class="fa fa-shield"></i>
+                        <input type="checkbox" id="mod-robustness" style="margin-right: 10px; float: left;">
+                    </h5>
+                    <div class="wrapper"
+                        style="text-align: center; display: flex; justify-content: left; align-items: left;">
+                        <div class="col-md-5" style="display: inline-block;">
+                            <label>
+                                <input type="checkbox" id="mod-noattack" value='No Attack' style="margin-right: 10px;"
+                                    checked>No Attack
+                            </label>
+                            <label>
+                                <input type="checkbox" id="mod-labelflipping" value='Label Flipping'
+                                    style="margin-right: 10px;">Label Flipping
+                            </label>
+                            <label>
+                                <input type="checkbox" id="mod-samplepoisoning" value='Sample Poisoning'
+                                    style="margin-right: 10px;">Sample Poisoning
+                            </label>
+                            <label>
+                                <input type="checkbox" id="mod-modelpoisoning" value='Model Poisoning'
+                                    style="margin-right: 10px;">Model Poisoning
+                            </label>
+                        </div>
+                        <div class="col-md-7" style="right: inherit;">
+                            <label>
+                                <input type="checkbox" id="mod-neuroninversion" value='GLLNeuronInversionAttack'
+                                    style="margin-right: 10px;">GLL Neuron Inversion
+                            </label>
+                            <label>
+                                <input type="checkbox" id="mod-swappingweights" value='SwappingWeightsAttack'
+                                    style="margin-right: 10px;">Swapping Weights
+                            </label>
+                            <label>
+                                <input type="checkbox" id="mod-delayer" value='DelayerAttack'
+                                    style="margin-right: 10px;">Delayer
+                            </label>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="gen-btn" id="generate-btn" class="btn btn-dark" data-bs-dismiss="modal">Generate</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Node Discovery Modal -->
+<div class="modal fade" id="vpnModal" tabindex="-1" aria-labelledby="vpnModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+    <div class="modal-content">
+        <div class="modal-header">
+        <h5 class="modal-title" id="vpnModalLabel">Discovered Nodes</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+        <form id="vpn-form">
+            <!-- Checkboxes here -->
+        </form>
+        </div>
+        <div class="modal-footer">
+        <button type="button" id="vpn-cancel-btn" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" id="vpn-accept-btn" class="btn btn-dark btn-sm">Accept</button>
+        </div>
+    </div>
+    </div>
+</div>
+
+<div id="spinner"></div>
+
+
+<section id="configuration" class="base">
+    <div class="container">
+        <div id="smac-draft-banner" class="container-shadow" style="display:none; padding: 12px 16px; margin-bottom: 12px; border-left: 4px solid #0d6efd; background: #f1f7ff;">
+            <div class="d-flex justify-content-between align-items-center flex-wrap">
+                <div>
+                    <strong id="smac-draft-title"></strong>
+                    <div id="smac-draft-changes" class="mt-1" style="font-size: 0.92em;"></div>
+                    <div id="smac-draft-note" class="text-muted mt-1" style="font-size: 0.85em;"></div>
+                </div>
+                <div class="mt-2">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="smac-draft-discard">Descartar borrador</button>
+                    <button type="button" class="btn btn-outline-danger btn-sm" id="smac-draft-stop-parent" style="display:none;">Detener simulación original</button>
+                </div>
+            </div>
+        </div>
+        <form id="form-configurations" class="row">
+            <div class="col-md-4">
+                <div class="form-group row container-shadow tiny grey">
+                    <h5 class="step-number">Scenario Information <i class="fa fa-file-text"></i></h5>
+                    <h5 class="step-title">Scenario title</h5>
+                    <div class="form-check form-check-inline">
+                        <input type="text" class="form-control" id="scenario-title" style="width: 75%"
+                            placeholder="Example scenario">
+                    </div>
+                    <h5 class="step-title">Scenario description</h5>
+                    <div class="form-check form-check-inline">
+                        <input type="text" class="form-control" id="scenario-description" style="width: 75%"
+                            placeholder="Write a description for the scenario">
+                    </div>
+                </div>
+                <div class="form-group row container-shadow tiny grey" id="deployment-group">
+                    <h5 class="step-number">Deployment <i class="fa fa-cloud-upload"></i></h5>
+                    <h5 class="step-title">Deployment type</h5>
+                    <div class="form-check form-check-inline">
+                      <input class="form-check-input" type="radio" name="deploymentRadioOptions" id="process-radio" value="process">
+                      <label class="form-check-label" for="process-radio">Processes</label>
+                      <small id="processHelp" class="form-text text-muted">
+                        <i id="processHelpIcon" class="fa fa-info-circle" style="cursor: pointer;"></i>
+                      </small>
+                    </div>
+                    <div class="form-check form-check-inline">
+                      <input class="form-check-input" type="radio" name="deploymentRadioOptions" id="docker-radio" value="docker" checked>
+                      <label class="form-check-label" for="docker-radio">Virtual devices</label>
+                      <small id="dockerHelp" class="form-text text-muted">
+                        <i id="dockerHelpIcon" class="fa fa-info-circle" style="cursor: pointer;"></i>
+                      </small>
+                    </div>
+                    <div class="form-check form-check-inline d-flex align-items-center">
+                      <input class="form-check-input me-2 mb-1 align-middle" type="radio" name="deploymentRadioOptions" id="physical-devices-radio" value="physical">
+                      <label class="form-check-label me-2 mb-0 align-middle" for="physical-devices-radio">Physical devices</label>
+                      <button type="button" id="discoverDevicesBtn" class="btn btn-dark btn-sm" disabled data-bs-toggle="tooltip" data-bs-placement="right" title="Load physical nodes from the static registry">Discover</button>
+                      <small id="physicalDevicesHelp" class="form-text text-muted ms-2 mb-0">
+                        <i id="physicalDevicesHelpIcon" class="fa fa-info-circle" style="cursor: pointer;"></i>
+                      </small>
+                    </div>
+                </div>
+                <div class="form-group row container-shadow tiny grey">
+                    <h5 class="step-number">Federation Architecture <i class="fa fa-puzzle-piece"
+                            aria-hidden="true"></i>
+                    </h5>
+                    <h5 class="step-title">Federation approach</h5>
+                    <div class="form-check form-check-inline">
+                        <select class="form-control" id="federationArchitecture" name="federation"
+                            style="display: inline; width: 50%">
+                            <option selected>DFL</option>
+                            <option>SDFL</option>
+                            <option>CFL</option>
+                        </select>
+                        <small id="architectureHelp" class="form-text text-muted">
+                            <i id="architectureHelpIcon" class="fa fa-info-circle" style="cursor: pointer;"></i>
+                        </small>
+                    </div>
+                    <h5 class="step-title">Number of rounds</h5>
+                    <div class="form-check form-check-inline">
+                        <input type="number" class="form-control" id="rounds" placeholder="Number of rounds" value="10"
+                            style="display: inline; width: 20%">
+                    </div>
+                </div>
+                <div id="networkTopologyForm" class="form-group row container-shadow tiny grey">
+                    <h5 class="step-number">Network Topology <i class="fa fa-sitemap"></i>
+                    </h5>
+                    <h5 class="step-title">Topology generation</h5>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="inlineNetworkTopology"
+                            id="custom-topology-btn">
+                        <label class="form-check-label" for="custom-topology-btn">Custom topology</label>
+                        <small id="topologyCustomHelp" class="form-text text-muted">
+                            <i id="topologyCustomIcon" class="fa fa-info-circle"></i>
+                        </small>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="inlineNetworkTopology"
+                            id="predefined-topology-btn" checked>
+                        <label class="form-check-label" for="predefined-topology-btn">Predefined topology</label>
+                        <small id="topologyPredefinedHelp" class="form-text text-muted">
+                            <i id="topologyPredefinedIcon" class="fa fa-info-circle"></i>
+                        </small>
+                    </div>
+                    <div id="predefined-topology">
+                        <select class="form-control" id="predefined-topology-select" name="predefined-topology"
+                            style="display: inline; width: 40%">
+                        </select>
+                        <input type="number" class="form-control" id="predefined-topology-nodes"
+                            placeholder="Number of nodes" min="1" value="3" oninput="greaterThan0(this)"
+                            style="display: inline; width: 40%">
+                        <div id="random-topology-options" style="display: none; margin-top: 10px;">
+                            <label for="random-probability">Edge Probability:</label>
+                            <select class="form-control" id="random-probability" style="display: inline; width: 40%">
+                                <option value="0.1">0.1</option>
+                                <option value="0.2">0.2</option>
+                                <option value="0.3">0.3</option>
+                                <option value="0.4">0.4</option>
+                                <option value="0.5" selected>0.5</option>
+                                <option value="0.6">0.6</option>
+                                <option value="0.7">0.7</option>
+                                <option value="0.8">0.8</option>
+                                <option value="0.9">0.9</option>
+                                <option value="1.0">1.0</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-8">
+                <div id="topology-container" style="border: 2px solid black; height: 600px;">
+                    <div id="legend-container">
+                        <div id="legend-label">LEGEND</div>
+                        <div id="legend">
+                            <div class="legend-item">
+                                <span class="legend-color circle"></span>
+                                <span class="legend-text">Aggregator</span>
+                            </div>
+                            <div class="legend-item">
+                                <span class="legend-color triangle"></span>
+                                <span class="legend-text">Trainer</span>
+                            </div>
+                            <div class="legend-item">
+                                <span class="legend-color square"></span>
+                                <span class="legend-text">Server</span>
+                            </div>
+                            <div class="legend-item">
+                                <span class="legend-color donut"></span>
+                                <span class="legend-text">Malicious</span>
+                            </div>
+                        </div>
+                        <div class="info-participants"><span>Number of participants:&nbsp;</span><span
+                                id="info-participants-number" style="display: inline">3</span>
+                        </div>
+                    </div>
+                    <div id="3d-graph-container" style="width: 100%; height: 100%; max-height: 600px">
+                        <div id="3d-graph" style="width: 100%; height: 100%; max-height: 600px"></div>
+                        <div id="node-dropdown" class="dropdown-menu" style="display: none"></div>
+                    </div>
+                </div>
+                <div class="row" style="margin-top: 10px;">
+                    <div class="col">
+                        <button id="mode-btn" type="button" class="btn btn-dark">Advanced mode</button>
+                        <button id="prev-btn" type="button" class="btn btn-dark" style="display: none;">&lt;</button>
+                        <div id="scenarios-position" style="display: inline-block;"></div>
+                        <button id="next-btn" type="button" class="btn btn-dark" style="display: none;">&gt;</button>
+                        <button id="add-btn" title="New Scenario" type="button" class="btn btn-dark">
+                            <i class="fa fa-plus" aria-hidden="true"></i>
+                        </button>
+                        <button id="del-btn" type="button" class="btn btn-dark"
+                            style="background-color: red; border-color: red; display: none;">
+                            <i class="fa fa-trash" aria-hidden="true"></i>
+                        </button>
+                    </div>
+                    <div class="col text-end">
+                        <button id="run-btn" type="button" class="btn btn-dark">Run NEBULA</button>
+                        <button id="load-config-btn" title="Upload Scenario" type="button" class="btn btn-dark">
+                            <i class="fa fa-upload" aria-hidden="true"></i>
+                        </button>
+                        <button id="save-config-btn" title="Download Scenario" type="button" class="btn btn-dark">
+                            <i class="fa fa-download" aria-hidden="true"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-12">
+                <div class="form-group row container-shadow tiny grey">
+                    <h5 class="step-number">Dataset <i class="fa fa-database"></i>
+                    </h5>
+                    <h5 class="step-title">Federated dataset</h5>
+                    <div class="form-check form-check-inline">
+                        <select class="form-control" id="datasetSelect" name="dataset"
+                            style="display: inline; width: 50%">
+                        </select>
+                        <small id="datasetHelp" class="form-text text-muted">
+                            <i id="datasetHelpIcon" class="fa fa-info-circle" style="cursor: pointer;"></i>
+                        </small>
+                    </div>
+                    <h5 class="step-title">Dataset type</h5>
+                    <div class="form-check form-check-inline">
+                        <select class="form-control" id="iidSelect" name="iid" style="display: inline; width: 50%">
+                            <option value="true">IID</option>
+                            <option value="false" selected>Non-IID</option>
+                        </select>
+                        <small id="iidHelp" class="form-text text-muted">
+                            <i id="iidHelpIcon" class="fa fa-info-circle" style="cursor: pointer;"></i>
+                        </small>
+                    </div>
+                    <h5 class="step-title">Partition methods</h5>
+                    <div class="form-check form-check-inline">
+                        <select class="form-control" id="partitionSelect" name="partition"
+                            style="display: inline; width: 50%">
+                            <option value="dirichlet" selected>Dirichlet</option>
+                            <option value="percent">Percentage</option>
+                            <option value="balancediid" disabled style="display: none;">Balanced IID</option>
+                            <option value="unbalancediid" disabled style="display: none;">Unbalanced IID</option>
+                        </select>
+                        <small id="partitionMethodsHelp" class="form-text text-muted">
+                            <i id="partitionMethodsHelpIcon" class="fa fa-info-circle" style="cursor: pointer;"></i>
+                            <i id="methodtip" class="fa fa-image" style="cursor: pointer;"></i>
+                        </small>
+                        <img id="methodtipImage" style="display: none; width: 200px; height: 200px;" alt="result">
+                    </div>
+                    <h5 class="step-title">Parameter setting</h5>
+                    <div id="partitionBlock" class="form-check form-check-inline">
+                        <input type="number" step="0.1" class="form-control" id="partitionParameter"
+                            style="display: inline; width: 50%" value="0.5">
+                        <small id="parameterSettingHelp" class="form-text text-muted">
+                            <i id="parameterSettingHelpIcon" class="fa fa-info-circle" style="cursor: pointer;"></i>
+                        </small>
+                    </div>
+                </div>
+                <div class="form-group row container-shadow tiny grey">
+                    <h5 class="step-number">Training <i class="fa fa-cogs"></i>
+                    </h5>
+                    <h5 class="step-title">Model</h5>
+                    <div class="form-check form-check-inline">
+                        <select class="form-control" id="modelSelect" name="model" style="display: inline; width: 50%">
+                        </select>
+                        <small id="modelHelp" class="form-text text-muted">
+                            <i id="modelHelpIcon" class="fa fa-info-circle" style="cursor: pointer;"></i>
+                        </small>
+                    </div>
+                </div>
+                <div class="form-group row container-shadow tiny grey">
+                    <h5 class="step-number">Aggregation <i class="fa fa-calculator"></i>
+                    </h5>
+                    <h5 class="step-title">Aggregation algorithm</h5>
+                    <div class="form-check form-check-inline">
+                        <select class="form-control" id="aggregationSelect" name="aggregation"
+                            style="display: inline; width: 50%">
+                            <option selected>FedAvg</option>
+                            <option>Krum</option>
+                            <option>TrimmedMean</option>
+                            <option>Median</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div id="expert-container" class="col-md-12 " style="display: none">
+                <div class="form-group row container-shadow tiny grey">
+                    <h5 class="step-number">Participants <i class="fa fa-users"></i>
+                    </h5>
+                    <h5 class="step-title">Logging</h5>
+                    <div class="form-check form-check-inline">
+                        <select class="form-control" id="loggingLevel" name="logginglevel"
+                            style="display: inline; width: 20%">
+                            <option value="false">Only alerts</option>
+                            <option value="true" selected>Alerts and logs</option>
+                        </select>
+                    </div>
+                    <h5 class="step-title">Reporting</h5>
+                    <div class="form-check form-switch" style="margin-left: 23px;">
+                        <input class="form-check-input" type="checkbox" id="reportingSwitch" checked="true"
+                            style="display: inline; width: 80px; height: 30px;">
+                    </div>
+                    <h5 class="step-title">Individual participants</h5>
+                    <div id="participant-items" class="row"></div>
+                </div>
+                <!-- Advanced Topology -->
+                <div class="form-group row container-shadow tiny grey">
+                    <h5 class="step-number">Advanced Topology <i class="fa fa-sitemap"></i>
+                    </h5>
+                    <div>
+                        <h5 class="step-title">Distance between participants</h5>
+                        <input type="range" class="form-range" id="distanceInput" min="0" max="1000" value="50"
+                            style="width: 30%; display: inline">
+                        <input type="number" class="form-control" id="distanceValue" min="0" max="1000" value="50"
+                            style="display:inline; width: 20%">
+                    </div>
+                </div>
+                <!-- Advanced Training -->
+                <div class="form-group row container-shadow tiny grey">
+                    <h5 class="step-number">Advanced Training <i class="fa fa-cogs"></i>
+                    </h5>
+                    <h5 class="step-title">Number of Epochs</h5>
+                    <div class="form-check form-check-inline">
+                        <input type="number" class="form-control" id="epochs" placeholder="Number of Epochs" value="1"
+                            style="display: inline; width: 80%">
+                    </div>
+                </div>
+                <!-- Differential Privacy -->
+                <div class="form-group row container-shadow tiny grey">
+                    <h5 class="step-number">Differential Privacy <i class="fa fa-user-secret"></i>
+                    </h5>
+                    <h5 class="step-title">Enable/Disable DP</h5>
+                    <div class="form-check form-switch" style="margin-left: 23px;">
+                        <input class="form-check-input" type="checkbox" id="dpSwitch"
+                            style="display: inline; width: 80px; height: 30px;">
+                    </div>
+                    <div id="dp-settings" style="margin-top: 10px; display: none;">
+                        <h5 class="step-title">Noise multiplier</h5>
+                        <div class="form-check form-check-inline">
+                            <input type="number" class="form-control" id="dpNoiseMultiplier"
+                                placeholder="Noise multiplier" min="0" step="0.01" value="1.0"
+                                style="display: inline; width: 80%">
+                        </div>
+                        <h5 class="step-title">Max Grad Norm</h5>
+                        <div class="form-check form-check-inline">
+                            <input type="number" class="form-control" id="dpMaxGradNorm"
+                                placeholder="Max Grad Norm" min="0" step="0.01" value="1.0"
+                                style="display: inline; width: 80%">
+                        </div>
+                        <small class="form-text text-muted">
+                            Other DP parameters are still taken from
+                            <code>nebula/frontend/config/participant.json.example</code>.
+                        </small>
+                    </div>
+                </div>
+                <!-- Adaptive Agent (SMAC copilot) -->
+                <div class="form-group row container-shadow tiny grey">
+                    <h5 class="step-number">Adaptive Agent (SMAC) <i class="fa fa-robot"></i>
+                    </h5>
+                    <h5 class="step-title">Enable/Disable the adaptive agent</h5>
+                    <div class="form-check form-switch" style="margin-left: 23px;">
+                        <input class="form-check-input" type="checkbox" id="adaptiveAgentSwitch"
+                            style="display: inline; width: 80px; height: 30px;">
+                    </div>
+                    <div id="adaptive-agent-settings" style="margin-top: 10px; display: none;">
+                        <div class="form-check form-switch" style="margin-left: 23px;">
+                            <input class="form-check-input" type="checkbox" id="adaptiveMultiAgentSwitch"
+                                style="display: inline; width: 80px; height: 30px;">
+                            <label class="form-check-label" for="adaptiveMultiAgentSwitch"
+                                style="margin-left: 10px;">Multi-agent crew (CrewAI)</label>
+                        </div>
+                        <div class="form-check form-switch" style="margin-left: 23px;">
+                            <input class="form-check-input" type="checkbox" id="adaptiveExecInterpreterSwitch"
+                                style="display: inline; width: 80px; height: 30px;">
+                            <label class="form-check-label" for="adaptiveExecInterpreterSwitch"
+                                style="margin-left: 10px;">Analyze the execution</label>
+                        </div>
+                        <div class="form-check form-switch" style="margin-left: 23px;">
+                            <input class="form-check-input" type="checkbox" id="adaptiveAggregatorSwitch"
+                                style="display: inline; width: 80px; height: 30px;">
+                            <label class="form-check-label" for="adaptiveAggregatorSwitch"
+                                style="margin-left: 10px;">Suggest aggregator change</label>
+                        </div>
+                        <div class="form-check form-switch" style="margin-left: 23px;">
+                            <input class="form-check-input" type="checkbox" id="adaptiveArchitectureSwitch"
+                                style="display: inline; width: 80px; height: 30px;">
+                            <label class="form-check-label" for="adaptiveArchitectureSwitch"
+                                style="margin-left: 10px;">Suggest architecture change</label>
+                        </div>
+                        <div class="form-check form-switch" style="margin-left: 23px;">
+                            <input class="form-check-input" type="checkbox" id="adaptivePauseSwitch" checked="true"
+                                style="display: inline; width: 80px; height: 30px;">
+                            <label class="form-check-label" for="adaptivePauseSwitch"
+                                style="margin-left: 10px;">Pause on suggestion or deficient node</label>
+                        </div>
+                        <div class="form-check form-switch" style="margin-left: 23px;">
+                            <input class="form-check-input" type="checkbox" id="adaptiveAggregatorAutoSwitch"
+                                style="display: inline; width: 80px; height: 30px;">
+                            <label class="form-check-label" for="adaptiveAggregatorAutoSwitch"
+                                style="margin-left: 10px;">Auto-apply aggregator changes (reserved)</label>
+                        </div>
+                        <small class="form-text text-muted">
+                            The agent only proposes; every change still needs your click.
+                        </small>
+                    </div>
+                </div>
+                <!-- Feature Squeezing -->
+                <div class="form-group row container-shadow tiny grey">
+                    <h5 class="step-number">Feature Squeezing <i class="fa fa-compress"></i>
+                    </h5>
+                    <h5 class="step-title">Enable/Disable Feature Squeezing</h5>
+                    <div class="form-check form-switch" style="margin-left: 23px;">
+                        <input class="form-check-input" type="checkbox" id="featureSqueezingSwitch"
+                            style="display: inline; width: 80px; height: 30px;">
+                    </div>
+                    <small id="feature-squeezing-dataset-note" class="form-text text-muted" style="display: none;">
+                        Feature Squeezing is currently available only for image datasets.
+                    </small>
+                    <div id="feature-squeezing-settings" style="margin-top: 10px; display: none;">
+                        <h5 class="step-title">n (bit depth)</h5>
+                        <div class="form-check form-check-inline">
+                            <select class="form-control" id="featureSqueezingN"
+                                style="display: inline; width: 80%">
+                                <option value="1">1</option>
+                                <option value="2">2</option>
+                                <option value="4" selected>4</option>
+                                <option value="8">8</option>
+                                <option value="16">16</option>
+                                <option value="32">32</option>
+                                <option value="64">64</option>
+                            </select>
+                        </div>
+                        <small class="form-text text-muted">
+                            Applies only to image datasets.
+                        </small>
+                    </div>
+                </div>
+                <!-- Adversarial Training -->
+                <div class="form-group row container-shadow tiny grey">
+                    <h5 class="step-number">Adversarial Training <i class="fa fa-shield"></i>
+                    </h5>
+                    <h5 class="step-title">Enable/Disable Adversarial Training</h5>
+                    <div class="form-check form-switch" style="margin-left: 23px;">
+                        <input class="form-check-input" type="checkbox" id="adversarialTrainingSwitch"
+                            style="display: inline; width: 80px; height: 30px;">
+                    </div>
+                    <small id="adversarial-training-dataset-note" class="form-text text-muted" style="display: none;">
+                        Adversarial Training for tabular datasets currently supports AdultCensus, BreastCancer, Covtype, and KDDCUP99 with constrained PGD.
+                    </small>
+                    <div id="adversarial-training-settings" style="margin-top: 10px; display: none;">
+                        <input type="hidden" id="adversarialTrainingDomain" value="image">
+                        <h5 class="step-title">Attack</h5>
+                        <div class="form-check form-check-inline">
+                            <select class="form-control" id="adversarialTrainingAttack"
+                                style="display: inline; width: 80%">
+                                <option value="fgsm" selected>FGSM</option>
+                                <option value="pgd">PGD</option>
+                            </select>
+                        </div>
+                        <h5 class="step-title">Epsilon</h5>
+                        <div class="form-check form-check-inline">
+                            <input type="number" class="form-control" id="adversarialTrainingEpsilon"
+                                placeholder="Epsilon" min="0" step="0.001" value="0.031372549"
+                                style="display: inline; width: 80%">
+                        </div>
+                        <h5 class="step-title">Apply probability</h5>
+                        <div class="form-check form-check-inline">
+                            <input type="number" class="form-control" id="adversarialTrainingApplyProbability"
+                                placeholder="Probability" min="0" max="1" step="0.05" value="0.3"
+                                style="display: inline; width: 80%">
+                        </div>
+                        <div id="adversarial-training-candidate-selection-settings" style="display: none;">
+                            <h5 class="step-title">Tabular candidate selection</h5>
+                            <div class="form-check form-check-inline">
+                                <select class="form-control" id="adversarialTrainingCandidateSelection"
+                                    style="display: inline; width: 80%">
+                                    <option value="none" selected>None</option>
+                                    <option value="loss_window">Loss window</option>
+                                    <option value="margin_window">Margin window</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="adversarial-training-loss-window-settings" style="display: none;">
+                            <h5 class="step-title">Tabular loss window</h5>
+                            <div class="form-check form-check-inline">
+                                <input type="number" class="form-control" id="adversarialTrainingTargetLossIncrease"
+                                    placeholder="Target loss increase" min="0" step="0.01" value=""
+                                    style="display: inline; width: 39%">
+                                <input type="number" class="form-control" id="adversarialTrainingMaxLossIncrease"
+                                    placeholder="Max loss increase" min="0" step="0.01" value=""
+                                    style="display: inline; width: 39%">
+                            </div>
+                        </div>
+                        <div id="adversarial-training-margin-window-settings" style="display: none;">
+                            <h5 class="step-title">Tabular margin window</h5>
+                            <div class="form-check form-check-inline">
+                                <input type="number" class="form-control" id="adversarialTrainingTargetMargin"
+                                    placeholder="Target margin" step="0.01" value="0"
+                                    style="display: inline; width: 39%">
+                                <input type="number" class="form-control" id="adversarialTrainingMaxMargin"
+                                    placeholder="Max margin" step="0.01" value="0.5"
+                                    style="display: inline; width: 39%">
+                            </div>
+                        </div>
+                        <div id="adversarial-training-pgd-settings" style="display: none;">
+                            <h5 class="step-title" id="adversarialTrainingStepsTitle">PGD steps</h5>
+                            <div class="form-check form-check-inline">
+                                <input type="number" class="form-control" id="adversarialTrainingSteps"
+                                    placeholder="Steps" min="1" step="1" value="1"
+                                    style="display: inline; width: 80%">
+                            </div>
+                            <input type="hidden" id="adversarialTrainingAlpha" value="">
+                        </div>
+                        <h5 class="step-title">Training mode</h5>
+                        <div class="form-check form-check-inline">
+                            <select class="form-control" id="adversarialTrainingMode"
+                                style="display: inline; width: 80%">
+                                <option value="mixed" selected>Clean + adversarial</option>
+                                <option value="adversarial">Adversarial only</option>
+                            </select>
+                        </div>
+                        <small class="form-text text-muted">
+                            Image datasets use FGSM/PGD. AdultCensus, BreastCancer, Covtype, and KDDCUP99 use constrained PGD for tabular adversarial training.
+                        </small>
+                    </div>
+                </div>
+                <!-- Advanced Robustness -->
+                <div class="form-group row container-shadow tiny grey">
+                    <h5 class="step-number">Robustness <i class="fa fa-shield"></i>
+                    </h5>
+                    <h5 class="step-title">Attack Type</h5>
+                    <div class="form-check form-check-inline">
+                        <select class="form-control" id="poisoning-attack-select" name="poisoning-attack"
+                            style="display: inline; width: 15%">
+                            <option selected>No Attack</option>
+                            <option>Label Flipping</option>
+                            <option>Sample Poisoning</option>
+                            <option>Model Poisoning</option>
+                            <option>GLL Neuron Inversion</option>
+                            <option>Swapping Weights</option>
+                            <option>Delayer</option>
+                            <option>Flooding</option>
+                        </select>
+                        <small id="sample-poisoning-dataset-note" class="form-text text-muted" style="display: none;">
+                            Sample Poisoning is currently available only for image datasets.
+                        </small>
+                        <h5 id="poisoned-node-title" class="step-title" style="margin-left: 11px; display: none;">%
+                            Malicious nodes</h5>
+                        <div class="form-check form-check-inline" style="display: none;"
+                            id="poisoned-node-percent-container">
+                            <input type="number" class="form-control" id="poisoned-node-percent"
+                                placeholder="% malicious nodes" min="0" value="0" style="display: inline; width: 20%">
+                            <select class="form-control" id="malicious-nodes-select" name="malicious-nodes-select"
+                                style="display: inline; width: 10%">
+                                <option selected>Percentage</option>
+                                <option>Manual</option>
+                            </select>
+                            <small id="maliciousHelp" class="form-text text-muted">
+                                <i id="maliciousHelpIcon" class="fa fa-info-circle" style="cursor: pointer;"></i>
+                            </small>
+                        </div>
+                        <h5 class="step-title" id="poisoned-sample-title" style="display: none;">% Samples poisoned by
+                            each malicious node</h5>
+                        <div class="form-check form-check-inline" id="poisoned-sample-percent-container"
+                            style="display: none;">
+                            <input type="number" class="form-control" id="poisoned-sample-percent"
+                                placeholder="% samples poisoned in each malicious node" min="0" value="0" max="100"
+                                oninput="isInRange(this, 0, 100)" style="display: inline; width: 20%">
+                        </div>
+                        <h5 id="poisoned-noise-title" class="step-title" style="display: none;">% Poisoned noise</h5>
+                        <div class="form-check form-check-inline" id="poisoned-noise-percent-container"
+                            style="display: none;">
+                            <input type="number" class="form-control" id="poisoned-noise-percent"
+                                placeholder="% noise in each poisoned sample" min="0" value="0"
+                                style="display: inline; width: 20%">
+                        </div>
+                        <h5 id="noise-type-title" class="step-title" style="display: none;">Noise type</h5>
+                        <div class="form-check form-check-inline" id="noise-type-container" style="display: none;">
+                            <select class="form-control" id="noise_type" name="noise-type"
+                                style="display: inline; width: 20%">
+                                <option selected>Gaussian</option>
+                                <option>Salt</option>
+                                <option>S&P</option>
+                            </select>
+                        </div>
+                        <h5 id="targeted-title" class="step-title" style="display: none;">Targeted</h5>
+                        <div class="form-check form-check-inline" id="targeted-container" style="display: none;">
+                            <div class="form-check form-switch" style="margin-bottom: 20px;">
+                                <input class="form-check-input" type="checkbox" id="targeted"
+                                        style="display: inline; width: 80px; height: 30px;">
+                            </div>
+                        </div>
+                        <h5 id="target_label-title" class="step-title" style="display: none;">Target label</h5>
+                        <div class="form-check form-check-inline" id="target_label-container" style="display: none;">
+                            <input type="number" class="form-control" id="target_label" placeholder="target label"
+                                min="0" value="4" style="display: inline; width: 20%">
+                        </div>
+                        <h5 id="target_changed_label-title" class="step-title" style="display: none;">Target changed
+                            label</h5>
+                        <div class="form-check form-check-inline" id="target_changed_label-container"
+                            style="display: none;">
+                            <input type="number" class="form-control" id="target_changed_label"
+                                placeholder="target changed label" min="0" value="7"
+                                style="display: inline; width: 20%">
+                        </div>
+                        <h5 id="layer_idx-title" class="step-title" style="display: none;">Layer</h5>
+                        <div class="form-check form-check-inline" id="layer_idx-container" style="display: none;">
+                            <input type="number" class="form-control" id="layer_idx" placeholder="Layer" value="0"
+                                style="display: inline; width: 80%">
+                        </div>
+                        <h5 id="delay-title" class="step-title" style="display: none;">Delay</h5>
+                        <div class="form-check form-check-inline" id="delay-container" style="display: none;">
+                            <input type="number" class="form-control" id="delay" placeholder="Delay" min="0" value="10"
+                                style="display: inline; width: 80%">
+                        </div>
+                        <h5 id="flooding-factor-title" class="step-title" style="display: none;">Flooding Factor</h5>
+                        <div class="form-check form-check-inline" id="flooding-factor-container" style="display: none;">
+                            <input type="number" class="form-control" id="flooding-factor" placeholder="Flooding Factor"
+                                min="1" value="100" style="display: inline; width: 80%">
+                        </div>
+                        <h5 id="target-percentage-title" class="step-title" style="display: none;">Target Percentage
+                        </h5>
+                        <div class="form-check form-check-inline" id="target-percentage-container"
+                            style="display: none;">
+                            <input type="number" class="form-control" id="target-percentage"
+                                placeholder="Target Percentage" min="1" value="100" style="display: inline; width: 80%">
+                        </div>
+                        <h5 id="selection-interval-title" class="step-title" style="display: none;">Target Selection
+                            Interval</h5>
+                        <div class="form-check form-check-inline" id="selection-interval-container"
+                            style="display: none;">
+                            <input type="number" class="form-control" id="selection-interval"
+                                placeholder="Selection Interval" min="1" value="1" style="display: inline; width: 80%">
+                        </div>
+                        <h5 id="start-attack-title" class="step-title" style="display: none;">Starting round</h5>
+                        <div class="form-check form-check-inline" id="start-attack-container" style="display: none;">
+                            <input type="number" class="form-control" id="start-attack" placeholder="Starting round"
+                                min="0" value="1" style="display: inline; width: 80%">
+                        </div>
+                        <h5 id="stop-attack-title" class="step-title" style="display: none;">Stopping round</h5>
+                        <div class="form-check form-check-inline" id="stop-attack-container" style="display: none;">
+                            <input type="number" class="form-control" id="stop-attack" placeholder="Stopping round"
+                                min="0" value="10" style="display: inline; width: 80%">
+                        </div>
+                        <h5 id="attack-interval-title" class="step-title" style="display: none;">Attack interval</h5>
+                        <div class="form-check form-check-inline" id="attack-interval-container" style="display: none;">
+                            <input type="number" class="form-control" id="attack-interval" placeholder="Repetitions"
+                                min="1" value="1" style="display: inline; width: 80%">
+                        </div>
+                    </div>
+                </div>
+                <!-- Advanced Defense -->
+                <div class="form-group row container-shadow tiny grey">
+                    <h5 class="step-number">Defense <i class="fa fa-wrench"></i>
+                    </h5>
+                    <h5 class="step-title">Enable/Disable Reputation</h5>
+                    <div class="form-check form-switch" style="margin-left: 23px;">
+                        <input class="form-check-input" type="checkbox" id="reputationSwitch"
+                            style="display: inline; width: 80px; height: 30px;">
+                    </div>
+                    <div id="reputation-settings" style="margin-top: 10px; display:none;">
+                        <h5 class="step-title">Reputation Initialization</h5>
+                        <input class="form-control" type="number" id="initial-reputation" name="initialReputation"
+                            step="0.01" style="display: inline; width: 80%" value="0.2" min="0.1" max="1">
+                        <small id="reputationInitializationHelp" class="form-text text-muted">
+                            <i id="reputationInitializationHelpIcon" class="fa fa-info-circle"
+                                style="cursor: pointer;"></i>
+                        </small>
+                    </div>
+                    <div id="weighting-settings" style="margin-top: 10px; display:none;">
+                        <h5 class="step-title">Weighting Factor</h5>
+                        <select class="form-control" id="weighting-factor" name="weightingFactor"
+                            style="display: inline; width: 80%">
+                            <option value="dynamic" selected>Dynamic</option>
+                            <option value="static">Static</option>
+                        </select>
+                        <small id="weightingFactorHelp" class="form-text text-muted">
+                            <i id="weightingFactorHelpIcon" class="fa fa-info-circle" style="cursor: pointer;"></i>
+                        </small>
+                    </div>
+                    <div id="reputation-metrics" style="display:none;">
+                        <h5 class="step-title">Reputation Metrics</h5>
+                        <p>Model-based metrics</p>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="model-similarity"
+                                name="modelSimilarity">
+                            <label class="form-check-label" for="model-similarity">Model Similarity</label>
+                            <input class="form-control weight-input" type="number" id="weight-model-similarity"
+                                name="weightModelSimilarity" step="0.01" value="0"
+                                placeholder="Weight to model similarity"
+                                style="display: none; width: 30%; margin-top:2px;">
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="fraction-parameters-changed"
+                                name="fractionParametersChanged">
+                            <label class="form-check-label" for="fraction-parameters-changed">Fraction Parameters
+                                Changed</label>
+                            <input class="form-control weight-input" type="number"
+                                id="weight-fraction-parameters-changed" name="weightFractionParametersChanged"
+                                step="0.01" value="0" placeholder="Weight to fraction paremeters changed"
+                                style="display: none; width: 30%; margin-top:2px;">
+                        </div>
+                        <p>Communication-based metrics</p>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="num-messages" name="numMessages">
+                            <label class="form-check-label" for="num-messages">Number of Messages</label>
+                            <input class="form-control weight-input" type="number" id="weight-num-messages"
+                                name="weightNumMessages" step="0.01" value="0"
+                                placeholder="Weight to number of messages"
+                                style="display: none; width: 30%; margin-top:2px;">
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="model-arrival-latency"
+                                name="modelArrivalLatency">
+                            <label class="form-check-label" for="model-arrival-latency">Model Arrival Latency</label>
+                            <input class="form-control weight-input" type="number" id="weight-model-arrival-latency"
+                                name="weightModelArrivalLatency" step="0.01" value="0"
+                                placeholder="Weight to model arrival latency"
+                                style="display: none; width: 30%; margin-top:2px;">
+                        </div>
+                        <p id="weight-warning" style="color: red; display: none;">Total weight must not exceed 1.</p>
+                    </div>
+                </div>
+                <!-- Mobility -->
+                <div class="form-group row container-shadow tiny grey">
+                    <h5 class="step-number">Mobility <i class="fa fa-car"></i>
+                    </h5>
+                    <h5 class="step-title">Select the default location for the participants</h5>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="locationRadioOptions"
+                            id="custom-location-btn" checked>
+                        <label class="form-check-label" for="custom-location-btn">Custom location</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="locationRadioOptions" id="random-geo-btn">
+                        <label class="form-check-label" for="random-geo-btn">Random location</label>
+                    </div>
+                    <div id="mobility-custom-location" style="display: block; margin-left: 20px">
+                        <h5 class="step-title">Latitude and longitude</h5>
+                        <div class="form-check form-check-inline">
+                            <input type="number" class="form-control" id="latitude" placeholder="Latitude" min="-90"
+                                max="90" value="38.023522" step="0.001" style="display: inline; width: 49%">
+                            <input type="number" class="form-control" id="longitude" placeholder="Longitude" min="-180"
+                                max="180" value="-1.174389" step="0.001" style="display: inline; width: 49%">
+                            <button id="open-map-btn" type="button" class="btn btn-dark" style="margin-top: 10px">Open
+                                map</button>
+                            <button id="current-location-btn" type="button" class="btn btn-dark"
+                                style="margin-top: 10px">Get current location</button>
+                            <div id="map-container" style="display: none; margin-top: 10px">
+                                <div id="map" style="width: 100%; height: 300px"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <h5 class="step-title">Mobility configuration</h5>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="mobility" id="without-mobility-btn" checked>
+                        <label class="form-check-label" for="without-mobility-btn">Disable Mobility</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="mobility" id="mobility-btn">
+                        <label class="form-check-label" for="mobility-btn">Enable Mobility</label>
+                    </div>
+                    <div id="mobility-options" style="display: none; margin-left: 10px">
+                        <h5 class="step-title">Network simulation</h5>
+                        <div class="form-check form-switch" style="margin-left: 23px; margin-bottom: 20px;">
+                            <input class="form-check-input" type="checkbox" id="networkSimulation" style="display: inline; width: 80px; height: 30px;">
+                        </div>
+                        <h5 class="step-title">Type of mobility</h5>
+                        <div class="form-check form-check-inline">
+                            <select class="form-control" id="mobilitySelect" name="mobility" style="display: inline">
+                                <option value="both" selected>Topology and Geographical</option>
+                                <option value="topology">Topology</option>
+                                <option value="geo">Geographical</option>
+                            </select>
+                        </div>
+                        <h5 class="step-title">Radius of federation (m)</h5>
+                        <div class="form-check form-check-inline">
+                            <input type="number" class="form-control" id="radiusFederation" placeholder="meters" min="0"
+                                value="500" style="display: inline; width: 80%">
+                        </div>
+                        <h5 class="step-title">Scheme of mobility</h5>
+                        <div class="form-check form-check-inline">
+                            <select class="form-control" id="schemeMobilitySelect" name="schemeMobility"
+                                style="display: inline" disabled>
+                                <option value="random" selected>Realistic mobility</option>
+                            </select>
+                        </div>
+                        <h5 class="step-title">Each participant moves every (rounds)</h5>
+                        <div class="form-check form-check-inline">
+                            <input type="number" class="form-control" id="roundFrequency" placeholder="rounds" min="1"
+                                value="1" style="display: inline; width: 80%">
+                        </div>
+                        <h5 class="step-title">% mobile participants</h5>
+                        <div class="form-check form-check-inline">
+                            <input type="number" class="form-control" id="mobileParticipantsPercent"
+                                placeholder="% of mobile participants" min="0" value="100"
+                                style="display: inline; width: 80%">
+                        </div>
+                        <h5 class="step-title">Mobility adaptation</h5>
+                        <div class="form-check form-check-inline">
+                            <select class="form-control" id="mobilityAdaptationSelect" name="mobilityAdaptation"
+                                style="display: inline">
+                                <option value="sa" selected>Situational Awareness</option>
+                                <option value="static">Static</option>
+                            </select>
+                        </div>
+                        <hr class="styled">
+                        <h5 class="step-title">Number of additional participants (deployed during
+                            federation)</h5>
+                        <div class="form-check form-check-inline">
+                            <input type="number" class="form-control" id="additionalParticipants"
+                                placeholder="Number of additional participants" min="0" value="0"
+                                style="display: inline; width: 80%">
+                        </div>
+                        <h5 class="step-title" id="connectionDelaytitle" style="display: none;">Connection delay (seconds)</h5>
+                        <div class="form-check form-switch" id="connectionDelayDiv" style="display: none; margin-left: 23px; margin-bottom: 20px;">
+                            <input class="form-check-input" type="checkbox" id="connectionDelaySwitch" checked style="display: inline; width: 80px; height: 30px; margin-right: 20px;">
+                            <input type="number" class="form-control" id="connectionDelay"
+                                placeholder="Connection delay" min="60" value="60"
+                                style="display: inline; width: 10%">
+                            <small id="connectionDelayHelp" class="form-text text-muted">
+                                <i id="connectionDelayHelpIcon" class="fa fa-info-circle" style="cursor: pointer;"></i>
+                            </small>
+                        </div>
+                        <div id="additional-participants-items"></div>
+                        <h5 class="step-title">Schema of deployment</h5>
+                        <div class="form-check form-check-inline">
+                            <select class="form-control" id="schemaAdditionalParticipantsSelect"
+                                name="schemaAdditionalParticipants" style="display: inline" disabled>
+                                <option value="random" selected>Random</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <!-- Situational awareness -->
+                <div class="form-group row container-shadow tiny grey" style="display: block;">
+                    <h5 class="step-number">Situtational Awareness <i class="fa fa-binoculars"></i>
+                    </h5>
+                    <h5 class="step-title">Enable/Disable SA</h5>
+                    <div class="form-check form-switch" style="margin-left: 23px; margin-bottom: 10px;">
+                        <input class="form-check-input" type="checkbox" id="situationalAwarenessSwitch" style="display: inline; width: 80px; height: 30px;" checked>
+                    </div>
+                    <div id="sa-settings" style="margin-top: 25px; display:none;">
+                        <h5 class="step-title">Strict Topology</h5>
+                        <div class="form-check form-switch" style="margin-left: 23px;">
+                            <input class="form-check-input" type="checkbox" id="strictTopologySwitch" style="display: inline; width: 80px; height: 30px;">
+                        </div>
+                    </div>
+                    <div id="sa-discovery-settings" style="margin-top: 10px; display:none;">
+                        <hr class="styled">
+                        <h5 class="step-title">SA Discovery</h5>
+                        <div id="SADiscovery-options" style="display: block;">
+                            <h5 class="step-title"><span style="font-weight:500;">Candidate Selector</span></h5>
+                            <div class="form-check form-check-inline">
+                                <select class="form-control" id="candidate-selector-select"
+                                    style="display: inline; width:100%">
+                                    <option selected>Distance</option>
+                                    <option>Random</option>
+                                    <option>Ring</option>
+                                    <option>Fully</option>
+                                </select>
+                            </div>
+                            <h5 class="step-title"><span style="font-weight:500;">Model Handler</span></h5>
+                            <div class="form-check form-check-inline">
+                                <select class="form-control" id="model-handler-select"
+                                    style="display: inline; width:100%">
+                                    <option selected>std</option>
+                                    <option>default</option>
+                                    <option>aggregator</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="sa-reasoner-settings" style="margin-top: 10px; display:none;">
+                        <hr class="styled">
+                        <h5 class="step-title">SA Reasoner</h5>
+                        <h5 class="step-title"><span style="font-weight:500;">Arbitration Policy</span></h5>
+                        <div class="form-check form-check-inline">
+                            <select class="form-control" id="arbitration-policy-select"
+                                style="display: inline; width:100%">
+                                <option selected>sap</option>
+                                <option>priority_with_llm_tiebreak</option>
+                            </select>
+                        </div>
+                        <h5 class="step-title" style="margin-top: 20px;"><span style="font-weight:500;">Neighbor Policy</span></h5>
+                        <div class="form-check form-check-inline">
+                            <select class="form-control" id="neighbor-policy-select"
+                                style="display: inline; width:100%">
+                                <option selected>Distance</option>
+                                <option>Random</option>
+                                <option>Ring</option>
+                                <option>Fully</option>
+                            </select>
+                        </div>
+                        <h5 class="step-title"><span style="font-weight:500;">Enable/Disable SAR training</span></h5>
+                        <div class="form-check form-switch" style="margin-left: 23px;">
+                            <input class="form-check-input" type="checkbox" id="situationalAwarenessTraining" style="display: inline; width: 80px; height: 30px;" checked>
+                        </div>
+                        <h5 class="step-title" id="training-policy-title" style="margin-top: 25px; display: none;"><span style="font-weight:500;">Training Policy</span></h5>
+                        <div class="form-check form-check-inline" id="training-policy-container" style="display: none;">
+                            <select class="form-control" id="training-policy-select" style="width:100%">
+                                <option selected>Broad-Propagation Strategy</option>
+                                <option>Quality-Driven Selection</option>
+                                <option>Hybrid Training Strategy</option>
+                                <option>Fast Reboot Training Strategy</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <!-- Trustworthiness -->
+                <div class="form-group row container-shadow tiny grey">
+                    <h5 class="step-number">Trustworthiness <i class="fa fa-binoculars"></i>
+                    </h5>
+                    <h5 class="step-title">Enable/Disable Trustworthiness</h5>
+                    <div class="form-check form-switch" style="margin-left: 23px;">
+                        <input class="form-check-input" type="checkbox" id="TrustworthinessSwitch" style="display: inline; width: 80px; height: 30px;">
+                    </div>
+                    <div id="trustworthiness-options" style="display: none;">
+                        <div id="tw-cfl" style="display: none;">
+                            <div class="trust-options">
+                                <div class="pillar">
+                                    <h5 class="step-title">Robustness pillar</h5>
+                                    <input type="number" class="form-control" id="cfl-robustness-pillar"
+                                        placeholder="Robustness pillar" min="5" value="20"
+                                        style="display: inline; width: 67%;">
+                                    <small class="form-text text-muted">%</small>
+                                </div>
+                                <div class="notion-container">
+                                    <div class="notion">
+                                        <h5 class="step-title">Resilience to attacks notion</h5>
+                                        <input type="number" class="form-control" id="cfl-robustness-notion-1"
+                                            placeholder="Resilience to attacks" min="20" value="40"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                    <div class="notion">
+                                        <h5 class="step-title" >Algorithm robustness notion</h5>
+                                        <input type="number" class="form-control" id="cfl-robustness-notion-2"
+                                            placeholder="Algorithm robustness" min="20" value="40"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                    <div class="notion">
+                                        <h5 class="step-title">Client reliability notion</h5>
+                                        <input type="number" class="form-control" id="cfl-robustness-notion-3"
+                                            placeholder="Client reliability" min="20" value="20"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="trust-options">
+                                <div class="pillar">
+                                    <h5 class="step-title">Privacy pillar</h5>
+                                    <input type="number" class="form-control" id="cfl-privacy-pillar"
+                                        placeholder="Privacy pillar" min="5" value="15"
+                                        style="display: inline; width: 67%">
+                                    <small class="form-text text-muted">%</small>
+                                </div>
+                                <div class="notion-container">
+                                    <div class="notion">
+                                        <h5 class="step-title">Technique notion</h5>
+                                        <input type="number" class="form-control" id="cfl-privacy-notion-1"
+                                            placeholder="Technique notion" min="20" value="20"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                    <div class="notion">
+                                        <h5 class="step-title">Uncertainty notion</h5>
+                                        <input type="number" class="form-control" id="cfl-privacy-notion-2"
+                                            placeholder="Uncertainty notion" min="20" value="60"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                    <div class="notion">
+                                        <h5 class="step-title">Indistinguishability notion</h5>
+                                        <input type="number" class="form-control" id="cfl-privacy-notion-3"
+                                            placeholder="Indistinguishability notion" min="20" value="20"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="trust-options">
+                                <div class="pillar">
+                                    <h5 class="step-title">Fairness pillar</h5>
+                                    <input type="number" class="form-control" id="cfl-fairness-pillar"
+                                        placeholder="Fairness pillar" min="5" value="15"
+                                        style="display: inline; width: 67%">
+                                    <small class="form-text text-muted">%</small>
+                                </div>
+                                <div class="notion-container">
+                                    <div class="notion">
+                                        <h5 class="step-title">Selection fairness notion</h5>
+                                        <input type="number" class="form-control" id="cfl-fairness-notion-1"
+                                            placeholder="Selection fairness notion" min="20" value="25"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                    <div class="notion">
+                                        <h5 class="step-title">Performance fairness  notion</h5>
+                                        <input type="number" class="form-control" id="cfl-fairness-notion-2"
+                                            placeholder="Performance fairness notion" min="20" value="25"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                    <div class="notion">
+                                        <h5 class="step-title">Class distribution notion</h5>
+                                        <input type="number" class="form-control" id="cfl-fairness-notion-3"
+                                            placeholder="Class distribution notion" min="20" value="25"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                    <div class="notion">
+                                        <h5 class="step-title">Outcome fairness notion</h5>
+                                        <input type="number" class="form-control" id="cfl-fairness-notion-4"
+                                            placeholder="Outcome fairness notion" min="20" value="25"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="trust-options">
+                                <div class="pillar">
+                                    <h5 class="step-title">Explainability pillar</h5>
+                                    <input type="number" class="form-control" id="cfl-explainability-pillar"
+                                        placeholder="Explainability pillar" min="5" value="15"
+                                        style="display: inline; width: 67%">
+                                    <small class="form-text text-muted">%</small>
+                                </div>
+                                <div class="notion-container">
+                                    <div class="notion">
+                                        <h5 class="step-title">Interpretability notion</h5>
+                                        <input type="number" class="form-control" id="cfl-explainability-notion-1"
+                                            placeholder="Interpretability notion" min="20" value="40"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                    <div class="notion">
+                                        <h5 class="step-title">Post hoc methods notion</h5>
+                                        <input type="number" class="form-control" id="cfl-explainability-notion-2"
+                                            placeholder="Post hoc methods notion" min="20" value="60"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="trust-options">
+                                <div class="pillar">
+                                    <h5 class="step-title">Accountability pillar</h5>
+                                    <input type="number" class="form-control" id="cfl-accountability-pillar"
+                                        placeholder="Accountability pillar" min="5" value="10"
+                                        style="display: inline; width: 67%">
+                                    <small class="form-text text-muted">%</small>
+                                </div>
+                                <div class="notion-container">
+                                    <div class="notion">
+                                        <h5 class="step-title">Factsheet completeness notion</h5>
+                                        <input type="number" class="form-control" id="cfl-accountability-notion-1"
+                                            placeholder="Factsheet completeness notion" min="20" value="80"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                    <div class="notion">
+                                        <h5 class="step-title">Monitoring notion</h5>
+                                        <input type="number" class="form-control" id="cfl-accountability-notion-2"
+                                            placeholder="Monitoring notion" min="20" value="20"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="trust-options">
+                                <div class="pillar">
+                                    <h5 class="step-title">Architectural soundness pillar</h5>
+                                    <input type="number" class="form-control" id="cfl-architectural-soundness-pillar"
+                                        placeholder="Architectural soundness pillar" min="5" value="10"
+                                        style="display: inline; width: 67%">
+                                    <small class="form-text text-muted">%</small>
+                                </div>
+                                <div class="notion-container">
+                                    <div class="notion">
+                                        <h5 class="step-title">Client management notion</h5>
+                                        <input type="number" class="form-control" id="cfl-architectural-soundness-notion-1"
+                                            placeholder="Client management notion" min="20" value="25"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                    <div class="notion">
+                                        <h5 class="step-title">Optimization notion</h5>
+                                        <input type="number" class="form-control" id="cfl-architectural-soundness-notion-2"
+                                            placeholder="Optimization notion" min="20" value="50"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                    <div class="notion">
+                                        <h5 class="step-title">Federation management notion</h5>
+                                        <input type="number" class="form-control" id="cfl-architectural-soundness-notion-3"
+                                            placeholder="Federation management notion" min="20" value="25"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="trust-options">
+                                <div class="pillar">
+                                    <h5 class="step-title">Sustainability pillar</h5>
+                                    <input type="number" class="form-control" id="cfl-sustainability-pillar"
+                                        placeholder="Sustainability pillar" min="5" value="15"
+                                        style="display: inline; width: 67%">
+                                    <small class="form-text text-muted">%</small>
+                                </div>
+                                <div class="notion-container">
+                                    <div class="notion">
+                                        <h5 class="step-title">Energy source notion</h5>
+                                        <input type="number" class="form-control" id="cfl-sustainability-notion-1"
+                                            placeholder="Energy source notion" min="20" value="50"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                    <div class="notion">
+                                        <h5 class="step-title">Hardware efficiency notion</h5>
+                                        <input type="number" class="form-control" id="cfl-sustainability-notion-2"
+                                            placeholder="Hardware efficiency notion" min="20" value="25"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                    <div class="notion">
+                                        <h5 class="step-title">Federation complexity notion</h5>
+                                        <input type="number" class="form-control" id="cfl-sustainability-notion-3"
+                                            placeholder="Federation complexity notion" min="20" value="25"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div> <!-- /#tw-cfl -->
+                        <div id="tw-dfl" style="display: none;">
+                            <div class="trust-options">
+                                <div class="pillar">
+                                    <h5 class="step-title">Robustness pillar</h5>
+                                    <input type="number" class="form-control" id="dfl-robustness-pillar"
+                                        placeholder="Robustness pillar" min="5" value="20"
+                                        style="display: inline; width: 67%;">
+                                    <small class="form-text text-muted">%</small>
+                                </div>
+                                <div class="notion-container">
+                                    <div class="notion">
+                                        <h5 class="step-title">Resilience to attacks notion</h5>
+                                        <input type="number" class="form-control" id="dfl-robustness-notion-1"
+                                            placeholder="Resilience to attacks" min="20" value="40"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                    <div class="notion">
+                                        <h5 class="step-title" >Algorithm robustness notion</h5>
+                                        <input type="number" class="form-control" id="dfl-robustness-notion-2"
+                                            placeholder="Algorithm robustness" min="20" value="40"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                    <div class="notion">
+                                        <h5 class="step-title">Client reliability notion</h5>
+                                        <input type="number" class="form-control" id="dfl-robustness-notion-3"
+                                            placeholder="Client reliability" min="20" value="20"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="trust-options">
+                                <div class="pillar">
+                                    <h5 class="step-title">Privacy pillar</h5>
+                                    <input type="number" class="form-control" id="dfl-privacy-pillar"
+                                        placeholder="Privacy pillar" min="5" value="15"
+                                        style="display: inline; width: 67%">
+                                    <small class="form-text text-muted">%</small>
+                                </div>
+                                <div class="notion-container">
+                                    <div class="notion">
+                                        <h5 class="step-title">Technique notion</h5>
+                                        <input type="number" class="form-control" id="dfl-privacy-notion-1"
+                                            placeholder="Technique notion" min="20" value="20"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                    <div class="notion">
+                                        <h5 class="step-title">Uncertainty notion</h5>
+                                        <input type="number" class="form-control" id="dfl-privacy-notion-2"
+                                            placeholder="Uncertainty notion" min="20" value="60"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                    <div class="notion">
+                                        <h5 class="step-title">Indistinguishability notion</h5>
+                                        <input type="number" class="form-control" id="dfl-privacy-notion-3"
+                                            placeholder="Indistinguishability notion" min="20" value="20"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="trust-options">
+                                <div class="pillar">
+                                    <h5 class="step-title">Fairness pillar</h5>
+                                    <input type="number" class="form-control" id="dfl-fairness-pillar"
+                                        placeholder="Fairness pillar" min="5" value="15"
+                                        style="display: inline; width: 67%">
+                                    <small class="form-text text-muted">%</small>
+                                </div>
+                                <div class="notion-container">
+                                    <div class="notion">
+                                        <h5 class="step-title">Class distribution notion</h5>
+                                        <input type="number" class="form-control" id="dfl-fairness-notion-3"
+                                            placeholder="Class distribution notion" min="20" value="50"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                    <div class="notion">
+                                        <h5 class="step-title">Outcome fairness notion</h5>
+                                        <input type="number" class="form-control" id="dfl-fairness-notion-4"
+                                            placeholder="Outcome fairness notion" min="20" value="50"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="trust-options">
+                                <div class="pillar">
+                                    <h5 class="step-title">Explainability pillar</h5>
+                                    <input type="number" class="form-control" id="dfl-explainability-pillar"
+                                        placeholder="Explainability pillar" min="5" value="15"
+                                        style="display: inline; width: 67%">
+                                    <small class="form-text text-muted">%</small>
+                                </div>
+                                <div class="notion-container">
+                                    <div class="notion">
+                                        <h5 class="step-title">Interpretability notion</h5>
+                                        <input type="number" class="form-control" id="dfl-explainability-notion-1"
+                                            placeholder="Interpretability notion" min="20" value="40"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                    <div class="notion">
+                                        <h5 class="step-title">Post hoc methods notion</h5>
+                                        <input type="number" class="form-control" id="dfl-explainability-notion-2"
+                                            placeholder="Post hoc methods notion" min="20" value="60"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="trust-options">
+                                <div class="pillar">
+                                    <h5 class="step-title">Accountability pillar</h5>
+                                    <input type="number" class="form-control" id="dfl-accountability-pillar"
+                                        placeholder="Accountability pillar" min="5" value="10"
+                                        style="display: inline; width: 67%">
+                                    <small class="form-text text-muted">%</small>
+                                </div>
+                                <div class="notion-container">
+                                    <div class="notion">
+                                        <h5 class="step-title">Factsheet completeness notion</h5>
+                                        <input type="number" class="form-control" id="dfl-accountability-notion-1"
+                                            placeholder="Factsheet completeness notion" min="20" value="80"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                    <div class="notion">
+                                        <h5 class="step-title">Monitoring notion</h5>
+                                        <input type="number" class="form-control" id="dfl-accountability-notion-2"
+                                            placeholder="Monitoring notion" min="20" value="20"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="trust-options">
+                                <div class="pillar">
+                                    <h5 class="step-title">Architectural soundness pillar</h5>
+                                    <input type="number" class="form-control" id="dfl-architectural-soundness-pillar"
+                                        placeholder="Architectural soundness pillar" min="5" value="10"
+                                        style="display: inline; width: 67%">
+                                    <small class="form-text text-muted">%</small>
+                                </div>
+                                <div class="notion-container">
+                                    <div class="notion">
+                                        <h5 class="step-title">Client management notion</h5>
+                                        <input type="number" class="form-control" id="dfl-architectural-soundness-notion-1"
+                                            placeholder="Client management notion" min="20" value="25"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                    <div class="notion">
+                                        <h5 class="step-title">Optimization notion</h5>
+                                        <input type="number" class="form-control" id="dfl-architectural-soundness-notion-2"
+                                            placeholder="Optimization notion" min="20" value="50"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                    <div class="notion">
+                                        <h5 class="step-title">Federation management notion</h5>
+                                        <input type="number" class="form-control" id="dfl-architectural-soundness-notion-3"
+                                            placeholder="Federation management notion" min="20" value="25"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="trust-options">
+                                <div class="pillar">
+                                    <h5 class="step-title">Sustainability pillar</h5>
+                                    <input type="number" class="form-control" id="dfl-sustainability-pillar"
+                                        placeholder="Sustainability pillar" min="5" value="15"
+                                        style="display: inline; width: 67%">
+                                    <small class="form-text text-muted">%</small>
+                                </div>
+                                <div class="notion-container">
+                                    <div class="notion">
+                                        <h5 class="step-title">Energy source notion</h5>
+                                        <input type="number" class="form-control" id="dfl-sustainability-notion-1"
+                                            placeholder="Energy source notion" min="20" value="50"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                    <div class="notion">
+                                        <h5 class="step-title">Federation complexity notion</h5>
+                                        <input type="number" class="form-control" id="dfl-sustainability-notion-3"
+                                            placeholder="Federation complexity notion" min="20" value="50"
+                                            style="display: inline; width: 70%;">
+                                        <small class="form-text text-muted">%</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div> <!-- /#tw-dfl -->
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+
+
+    {% if not user_logged_in %}
+    <script>
+        showAlert('info', 'Some functionalities are disabled in the demo version.');
+    </script>
+    {% endif %}
+
+    <script type="module">
+        import DeploymentManager from '../../static/js/deployment/main.js';
+        import ScenarioManager from '../../static/js/deployment/scenario.js';
+        import TopologyManager from '../../static/js/deployment/topology.js';
+        import AttackManager from '../../static/js/deployment/attack.js';
+        import MobilityManager from '../../static/js/deployment/mobility.js';
+        import ReputationManager from '../../static/js/deployment/reputation.js';
+        import TrustworthinessManager from '../../static/js/deployment/trustworthiness.js';
+        import GraphSettings from '../../static/js/deployment/graph-settings.js';
+        import Utils from '../../static/js/deployment/utils.js';
+        import HelpContent from '../../static/js/deployment/help-content.js';
+        import UIControls from '../../static/js/deployment/ui-controls.js';
+
+        // Make modules globally available
+        window.ScenarioManager = ScenarioManager;
+        window.TopologyManager = TopologyManager;
+        window.AttackManager = AttackManager;
+        window.MobilityManager = MobilityManager;
+        window.ReputationManager = ReputationManager;
+        window.TrustworthinessManager = TrustworthinessManager;
+        window.GraphSettings = GraphSettings;
+        window.HelpContent = HelpContent;
+        window.UIControls = UIControls;
+
+        // Make Utils functions globally available for HTML event handlers
+        window.greaterThan0 = Utils.greaterThan0;
+        window.isInRange = Utils.isInRange;
+        window.atLeastOneChecked = Utils.atLeastOneChecked;
+        window.selectALL = Utils.selectALL;
+        window.showAlert = Utils.showAlert;
+        window.handleProbabilityChange = Utils.handleProbabilityChange;
+
+        // Initialize when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            DeploymentManager.initialize();
+            UIControls.initializeUIControls();
+        });
+    </script>
+
+    {% endblock %}

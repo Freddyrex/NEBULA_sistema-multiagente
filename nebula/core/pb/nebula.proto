@@ -1,0 +1,223 @@
+// NEBULA Protocol Buffers. This file defines the message types and RPC services for the NEBULA framework.
+// The protocol buffer compiler generates Python code from this file, which is used to serialize and deserialize messages.
+// Please, follow the instructions below to generate the Python code from this file.
+
+// Install the protocol buffer compiler (protoc):
+// MacOs: brew install protobuf
+// Linux: sudo apt-get install protobuf-compiler
+// Windows: https://www.geeksforgeeks.org/how-to-install-protocol-buffers-on-windows/ (example)
+
+// Run the following command to generate the Python code from the proto file (from the root directory of the project):
+// protoc -I=nebula/core/pb --python_out=nebula/core/pb nebula/core/pb/nebula.proto
+
+syntax = "proto3";
+package nebula;
+
+message Wrapper {
+  string source = 1;         // Unique identifier of the source node.
+  oneof message {
+    DiscoveryMessage discovery_message = 2;
+    ControlMessage control_message = 3;
+    FederationMessage federation_message = 4;
+    ModelMessage model_message = 5;
+    ConnectionMessage connection_message = 6;
+    ResponseMessage response_message = 7;
+    ReputationMessage reputation_message = 8;
+    DiscoverMessage discover_message = 9;
+    OfferMessage offer_message = 10;
+    LinkMessage link_message = 11;
+    TrustworthinessMessage trustworthiness_message = 12;
+    TrustscoresMessage trustscores_message = 13;
+    SdflmodelMessage sdflmodel_message = 14;
+    ReputationtableMessage reputationtable_message = 15;
+    NegotiationMessage negotiation_message = 16;
+  }
+}
+
+message DiscoveryMessage {
+  enum Action {
+    DISCOVER = 0;
+    REGISTER = 1;
+    DEREGISTER = 2;
+  }
+  Action action = 1;
+  float latitude = 2;
+  float longitude = 3;
+}
+
+message ControlMessage {
+  enum Action {
+    ALIVE = 0;
+    OVERHEAD = 1;
+    MOBILITY = 2;
+    RECOVERY = 3;
+    WEAK_LINK = 4;
+    LEADERSHIP_TRANSFER = 5;
+    LEADERSHIP_TRANSFER_ACK = 6;
+  }
+  Action action = 1;
+  string log = 2;
+}
+
+// FederationMessage encapsulates messages exchanged between nodes for various operational purposes.
+message FederationMessage {
+  enum Action {
+    FEDERATION_START = 0;
+    REPUTATION = 1;
+    FEDERATION_MODELS_INCLUDED = 2;
+    FEDERATION_READY = 3;
+  }
+  Action action = 1;
+  repeated string arguments = 2;  // Arguments or parameters associated with the action.
+  int32 round = 3;                // Identifies the communication round, particularly useful in iterative processes.
+}
+
+message ModelMessage {
+  bytes parameters = 1;       // Serialized form of the model parameters.
+  int64 weight = 2;           // Significance or weighting factor of this model update, e.g., based on sample size.
+  int32 round = 3;            // Identifies the communication round, particularly useful in iterative processes.
+}
+
+message SdflmodelMessage {
+  enum Action {
+    TRAINER_UPDATE = 0;
+    GLOBAL_MODEL = 1;
+  }
+  Action action = 1;
+  string target = 2;          // Target role: "aggregator" or "trainer".
+  bytes parameters = 3;       // Serialized form of the model parameters.
+  int64 weight = 4;           // Significance or weighting factor of this model update.
+  int32 round = 5;            // Identifies the communication round.
+  string node_id = 6;         // Logical producer of the update/model, preserved during forwarding.
+}
+
+message ConnectionMessage {
+  enum Action {
+    CONNECT = 0;
+    DISCONNECT = 1;
+    LATE_CONNECT = 2;         // Message send when late connection to federation
+    RESTRUCTURE = 3;          // Message to notify connection is because restructuration of topology
+  }
+  Action action = 1;
+}
+
+message DiscoverMessage {
+  enum Action {
+    DISCOVER_JOIN = 0;        // Message to discover nodes on federation when i'm new
+    DISCOVER_NODES = 1;       // Message to discover nodes on federation when i'm already in
+    LATE_CONNECT = 2;         // Message send when late connection to federation
+    RESTRUCTURE = 3;          // Message to notify connection is because restructuration of topology
+  }
+  Action action = 1;
+}
+
+message OfferMessage{
+    enum Action {
+        OFFER_MODEL = 0;      // Message to offer model info to a new node
+        OFFER_METRIC = 1;     // Message to offer metrics info to a node on federation
+    }
+    Action action = 1;
+    float n_neighbors = 2;
+    float loss = 3;
+    bytes parameters = 4;
+    int32 rounds = 5;
+    int32 round = 6;
+    int32 epochs = 7;
+}
+
+message LinkMessage {
+    enum Action {
+        CONNECT_TO = 0;         // Message to tell a node who to connect to
+        DISCONNECT_FROM = 1;    // Message to tell a node who to disconnect
+    }
+    Action action = 1;
+    string addrs = 2;
+}
+
+message ReputationMessage {
+  enum Action {
+    SHARE = 0;
+  }
+  string node_id = 1; //Id of the node to which the reputation is sent
+  float score = 2; //Score reputation
+  int32 round = 3; //Round to send the reputation
+  Action action = 4; // Action type (default: SHARE)
+}
+
+message ReputationtableMessage {
+  enum Action {
+    TABLE = 0;
+  }
+  string node_id = 1; // Logical source node of the reputation table.
+  int32 round = 2; // Round to which the reputation table belongs.
+  string reputation_table_json = 3; // JSON encoded reputation table.
+  Action action = 4; // Action type (default: TABLE)
+}
+
+// Response transmits the outcome of a requested operation, including any errors.
+message ResponseMessage {
+  string response = 1;      // Outcome of the requested operation.
+}
+
+message TrustworthinessMessage {
+  enum Action {
+    REPORT = 0;
+  }
+
+  Action action = 1;
+  string node_id = 2;
+  int64 bytes_sent = 3;
+  int64 bytes_recv = 4;
+  double accuracy = 5;
+  double loss = 6;
+  string role = 7;
+  double energy_grid = 8;
+  double emissions = 9;
+  string workload = 10;
+  string cpu_model = 11;
+  string gpu_model = 12;
+  bool cpu_used = 13;
+  bool gpu_used = 14;
+  double energy_consumed = 15;
+  int32 sample_size = 16;
+  float class_imbalance = 17;
+  int64 model_size = 18;
+  float local_entropy = 19;
+  float val_accuracy = 20;
+  bool dp_enabled = 21;
+  float dp_epsilon = 22;
+  double macro_f1 = 23;
+  double train_accuracy = 24;
+}
+
+message TrustscoresMessage {
+  enum Action {
+    SHARE = 0;
+  }
+
+  Action action = 1;
+  string node_id = 2;
+  string trust_report_json = 3;
+}
+
+// NegotiationMessage carries the SMAC inter-node coordination protocol
+// (contract-net style) for topology edge changes. A node proposes an edge
+// change to a peer; the peer replies ACCEPT/REJECT/COUNTER_PROPOSAL. The
+// edge is only restructured on mutual ACCEPT, avoiding inconsistent graph
+// states when two nodes restructure the same edge concurrently.
+message NegotiationMessage {
+  enum Action {
+    PROPOSE = 0;           // New topology-change proposal
+    ACCEPT = 1;            // Peer accepts the proposal
+    REJECT = 2;            // Peer rejects the proposal
+    COUNTER_PROPOSAL = 3;  // Peer proposes a modified edge change
+  }
+  Action action = 1;
+  string proposal_id = 2;  // UUID identifying the negotiation
+  string edge_a = 3;       // First endpoint of the proposed edge change
+  string edge_b = 4;       // Second endpoint of the proposed edge change
+  string change = 5;       // "connect" | "disconnect"
+  string reason = 6;       // Human-readable rationale
+  int32 ttl_rounds = 7;    // Rounds after which the proposal expires
+  int32 round = 8;         // FL round when the proposal was issued
+}

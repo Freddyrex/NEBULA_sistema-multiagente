@@ -1,0 +1,210 @@
+{
+  "scenario_args": {
+    "name": "",
+    "start_time": "",
+    "federation": "DFL",
+    "rounds": 10,
+    "deployment": "process",
+    "controller": "127.0.0.1:5000",
+    "random_seed": 42,
+    "n_nodes": 0,
+    "config_version": "development"
+  },
+  "device_args": {
+    "uid": "",
+    "idx": "",
+    "name": "",
+    "username": "change-me",
+    "password": "change-me-generate-a-strong-password",
+    "role": "aggregator",
+    "proxy": false,
+    "malicious": false,
+    "start": false,
+    "accelerator": "cpu",
+    "gpu_id" : null,
+    "devices": 2,
+    "strategy": "ddp",
+    "logging": false
+  },
+  "security_args": {
+    "certfile": "",
+    "keyfile": "",
+    "cafile": ""
+  },
+  "federation_args": {
+    "round": 0
+  },
+  "network_args": {
+    "ip": "",
+    "port": 0,
+    "addr": "",
+    "neighbors": "",
+    "interface": "eth0",
+    "simulation": false,
+    "bandwidth": "5Gbps",
+    "delay": "0ms",
+    "delay-distro": "0ms",
+    "delay-distribution": "normal",
+    "loss": "0%",
+    "duplicate": "0%",
+    "corrupt": "0%",
+    "reordering": "0%"
+  },
+  "adaptive_args": {
+    "model_similarity": true
+  },
+  "mobility_args": {
+    "latitude": "",
+    "longitude": "",
+    "change_geo_interval": 5,
+    "grace_time_mobility": 60,
+    "random_geo": true,
+    "mobility": false,
+    "mobility_type": "topology",
+    "topology_type": "",
+    "radius_federation": 1000,
+    "scheme_mobility": "random",
+    "round_frequency": 1,
+    "neighbors_distance": {},
+    "additional_node": {
+      "status": false,
+      "time_start": 0,
+      "scheme": "random"
+    }
+  },
+  "data_args": {
+    "dataset": "MNIST",
+    "iid": false,
+    "num_workers": 0,
+    "partition_selection": "dirichlet",
+    "partition_parameter": 0.5
+  },
+  "model_args": {
+    "model": "MLP"
+  },
+  "training_args": {
+    "trainer": "lightning",
+    "epochs": 3,
+    "dp": {
+      "enabled": false,
+      "noise_multiplier": 1.0,
+      "max_grad_norm": 1.0,
+      "target_delta": 1e-5,
+      "accountant": "prv",
+      "secure_mode": false,
+      "poisson_sampling": true,
+      "clipping": "flat"
+    }
+  },
+  "aggregator_args": {
+    "algorithm": "FedAvg",
+    "aggregation_timeout": 240,
+    "aggregation_push": "slow"
+  },
+  "defense_args": {
+    "feature_squeezing": {
+      "enabled": false,
+      "bit_depth": 4,
+      "apply_to_train": true,
+      "apply_to_test": true,
+      "apply_to_local_test": true
+    },
+    "adversarial_training": {
+      "enabled": false,
+      "domain": "image",
+      "attack": "fgsm",
+      "epsilon": 0.03,
+      "steps": 1,
+      "mode": "mixed",
+      "apply_probability": 0.3,
+      "candidate_selection": "none",
+      "target_loss_increase": null,
+      "max_loss_increase": null,
+      "target_margin": 0,
+      "max_margin": 0.5
+    },
+    "reputation": {
+      "enabled": false,
+      "metrics": {},
+      "initial_reputation": 0.2,
+      "weighting_factor": "dynamic"
+    }
+  },
+  "adversarial_args": {
+    "attack_params" : {}
+  },
+  "tracking_args": {
+    "enable_remote_tracking": false,
+    "local_tracking": "basic",
+    "log_dir": "/nebula/app/logs",
+    "config_dir": "/nebula/app/config",
+    "run_hash": ""
+  },
+  "mender_args": {
+    "id": "",
+    "mac": "",
+    "device_type": ""
+  },
+  "message_args": {
+    "max_local_messages": 10000,
+    "compression": "zlib"
+  },
+  "reporter_args": {
+    "grace_time_reporter": 10,
+    "report_frequency": 5,
+    "report_status_data_queue": true
+  },
+  "thermal_args": {
+    "cpu_tdp_w": 95.0,
+    "base_power_w": 15.0,
+    "temp_seed_c": 45.0,
+    "arx_cpu": {"a1": 0.88, "b1": 0.10, "b2": 0.02, "b3": 0.01, "b4": 0.05},
+    "arx_gpu": {"a2": 0.85, "g1": 0.08, "g2": 0.05, "g3": 0.002, "g4": 0.03},
+    "energy_weights": {"w0": 0.0005, "w1": 0.000042, "w2": 0.00000001, "w3": 0.000001, "w4": 0.00002, "w5": 0.00003, "w6": 0.00001, "w7": 0.0000001}
+  },
+  "discoverer_args": {
+    "grace_time_discovery": 0,
+    "discovery_frequency": 10,
+    "discovery_interval": 0.2
+  },
+  "health_args": {
+    "grace_time_health": 60,
+    "health_interval": 15,
+    "send_alive_interval": 0.2,
+    "check_alive_interval": 5,
+    "alive_timeout": 120
+  },
+  "network_monitor_args": {
+    "enabled": true,
+    "probe_interval_s": 2.0,
+    "probe_timeout_s": 1.0,
+    "rtt_threshold_ms": 200.0,
+    "jitter_threshold_ms": 50.0,
+    "loss_threshold_pct": 10.0,
+    "failed_probes_threshold": 3,
+    "history_size": 20,
+    "metrics_ttl_s": 30.0,
+    "election_cooldown_s": 30.0,
+    "switch_hold_rounds": 3,
+    "max_buffer_transfer_mb": 32,
+    "startup_grace_s": 30.0,
+    "degrade_confirm_s": 3.0,
+    "digest_interval_s": 5.0
+  },
+  "forwarder_args": {
+    "forwarder_interval": 1,
+    "forward_messages_interval": 0,
+    "number_forwarded_messages": 100
+  },
+  "propagator_args": {
+    "propagate_interval": 3,
+    "propagate_model_interval": 0,
+    "propagation_early_stop": 3,
+    "history_size": 20
+  },
+  "misc_args": {
+    "grace_time_connection": 10,
+    "grace_time_start_federation": 10,
+    "leadership_ack_timeout": 20
+  }
+}
