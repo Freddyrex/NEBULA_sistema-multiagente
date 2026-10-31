@@ -109,7 +109,7 @@ def test_decision_resumes_after_accept_and_reject():
         deps = _deps(tmp)
         maybe_auto_pause(deps, "demo", _state_with_suggestion())
 
-        async def fake_exec(record, *a):
+        async def fake_exec(record, *a, **kw):
             return {"ok": True, "detail": "fake"}
 
         real = smac_api.execute_action
