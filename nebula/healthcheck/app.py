@@ -10,10 +10,10 @@ Then check the endpoint:
 """
 from fastapi import FastAPI
 
-app = FastAPI(title="NEBULA Health API", version="1.0.0")
+app = FastAPI(title="NEBULA Health API", version="1.1.0")
 
 
 @app.get("/health", tags=["Health"], summary="Service health status")
 def health() -> dict[str, str]:
     """Return the current health status of the service."""
-    return {"status": "ok"}
+    return {"status": "ok", "service": "nebula", "version": "1.1.0"}

@@ -10,4 +10,7 @@ def test_health_returns_ok() -> None:
     """GET /health must report an ok status."""
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["service"] == "nebula"
+    assert body["version"] == "1.1.0"
