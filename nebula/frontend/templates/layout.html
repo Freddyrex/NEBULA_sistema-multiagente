@@ -170,7 +170,7 @@
                 if (pjs) pjs.style.display = 'none';
                 return;
             }
-            particlesJS.load('particles-js', {{ url_for('static', path='js/particles.json') | tojson }}, function() {
+            particlesJS.load('particles-js', {{ url_for('static', path='js/particles.json') | string | tojson }}, function() {
                 console.log('Particles loaded in NEBULA');
             });
         });

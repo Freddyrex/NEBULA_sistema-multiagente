@@ -103,6 +103,17 @@ def test_frontend_log_path_is_writable(frontend):
     assert log_path.parent.is_dir()
 
 
+def test_landing_page_renders(frontend):
+    """The public landing page renders with the module-relative templates."""
+    from fastapi.testclient import TestClient
+
+    client = TestClient(frontend.app)
+    response = client.get("/platform/")
+
+    assert response.status_code == 200
+    assert "NEBULA" in response.text
+
+
 def test_controller_creates_databases_and_log_parents(controller, tmp_path, monkeypatch):
     """The controller creates the directories it needs at startup."""
     monkeypatch.delenv("NEBULA_DATABASES_DIR", raising=False)
