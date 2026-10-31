@@ -13,4 +13,4 @@ def test_health_returns_ok() -> None:
     body = response.json()
     assert body["status"] == "ok"
     assert body["service"] == "nebula"
-    assert body["version"] == "1.1.0"
+    assert body["version"] == "9.9.9"  # fallo intencional
