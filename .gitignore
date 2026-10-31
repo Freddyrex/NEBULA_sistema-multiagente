@@ -159,6 +159,7 @@ app/*
 !nebula/frontend/metrics/tags.yaml
 !docs/mkdocs.yml
 !.pre-commit-config.yaml
+!render.yaml
 data/
 *.db*
 *.out
