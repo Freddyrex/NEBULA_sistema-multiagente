@@ -13,6 +13,7 @@ import signal
 import sys
 import time
 import zipfile
+from pathlib import Path
 from urllib.parse import urlencode
 
 import aiohttp
@@ -23,6 +24,8 @@ from dotenv import load_dotenv
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+
+BASE_DIR = Path(__file__).resolve().parent
 
 
 class Settings:
@@ -51,6 +54,8 @@ class Settings:
 
     controller_host: str = os.environ.get("NEBULA_CONTROLLER_HOST")
     controller_port: int = os.environ.get("NEBULA_CONTROLLER_PORT", 5050)
+    controller_scheme: str = os.environ.get("NEBULA_CONTROLLER_SCHEME", "http")
+    controller_public_endpoint: str = os.environ.get("NEBULA_CONTROLLER_PUBLIC_ENDPOINT", "")
     resources_threshold: float = 0.0
     port: int = os.environ.get("NEBULA_FRONTEND_PORT", 8080)
     production: bool = os.environ.get("NEBULA_PRODUCTION", "False") == "True"
@@ -64,11 +69,42 @@ class Settings:
     env_file: str = os.environ.get("NEBULA_ENV_PATH", ".env")
     statistics_port: int = os.environ.get("NEBULA_STATISTICS_PORT", 8080)
     PERMANENT_SESSION_LIFETIME: datetime.timedelta = datetime.timedelta(minutes=60)
-    templates_dir: str = "templates"
-    frontend_log: str = os.environ.get("NEBULA_FRONTEND_LOG", "/nebula/app/logs/frontend.log")
+    templates_dir: str = str(BASE_DIR / "templates")
+    frontend_log: str = os.environ.get("NEBULA_FRONTEND_LOG", "")
+
+
+def _resolve_frontend_log() -> str:
+    """
+    Return a writable path for the frontend log file.
+
+    Uses NEBULA_FRONTEND_LOG when set. Otherwise it prefers ``app/logs`` inside
+    the repository (the convention used by the Docker deployment) and falls back
+    to ``/tmp`` when that location is not writable, so importing the app never
+    fails because of an unwritable log path.
+
+    Returns:
+        str: Absolute path of the frontend log file.
+    """
+    configured = str(os.environ.get("NEBULA_FRONTEND_LOG") or "").strip()
+    if configured:
+        Path(configured).expanduser().parent.mkdir(parents=True, exist_ok=True)
+        return configured
+    candidate = BASE_DIR.parent.parent / "app" / "logs" / "frontend.log"
+    try:
+        candidate.parent.mkdir(parents=True, exist_ok=True)
+        with open(candidate, "a", encoding="utf-8"):
+            pass
+        return str(candidate)
+    except OSError:
+        fallback = Path("/tmp/nebula-frontend.log")
+        fallback.parent.mkdir(parents=True, exist_ok=True)
+        return str(fallback)
 
 
 settings = Settings()
+settings.frontend_log = _resolve_frontend_log()
+
+Path(settings.frontend_log).expanduser().parent.mkdir(parents=True, exist_ok=True)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -169,7 +205,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.mount("/platform/static", StaticFiles(directory="static"), name="static")
+app.mount("/platform/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 
 class ConnectionManager:
@@ -446,6 +482,34 @@ def _controller_request_headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+def controller_base_url() -> str:
+    """
+    Return the base URL used to reach the controller service.
+
+    Resolution order: NEBULA_CONTROLLER_PUBLIC_ENDPOINT (absolute URL, used
+    as-is), otherwise scheme://host[:port] built from NEBULA_CONTROLLER_SCHEME,
+    NEBULA_CONTROLLER_HOST and NEBULA_CONTROLLER_PORT.
+
+    Returns:
+        str: The controller base URL without a trailing slash.
+    """
+    endpoint = str(os.environ.get("NEBULA_CONTROLLER_PUBLIC_ENDPOINT") or "").strip().rstrip("/")
+    if endpoint:
+        return endpoint
+    scheme = str(os.environ.get("NEBULA_CONTROLLER_SCHEME") or settings.controller_scheme or "http")
+    scheme = scheme.strip().rstrip(":/").lower() or "http"
+    host = str(os.environ.get("NEBULA_CONTROLLER_HOST") or settings.controller_host or "").strip()
+    if not host:
+        host = "127.0.0.1"
+    try:
+        port = int(os.environ.get("NEBULA_CONTROLLER_PORT") or settings.controller_port)
+    except (TypeError, ValueError):
+        port = 5050
+    if port in (80, 443):
+        return f"{scheme}://{host}"
+    return f"{scheme}://{host}:{port}"
+
+
 def _presented_token(request: Request) -> str:
     """
     Return the bearer or custom header token presented by the caller, empty when absent.
@@ -719,7 +783,7 @@ async def get_available_gpus():
     Raises:
         HTTPException: If the underlying HTTP request fails.
     """
-    url = f"http://{settings.controller_host}:{settings.controller_port}/available_gpus"
+    url = f"{controller_base_url()}/available_gpus"
     return await controller_get(url)
 
 
@@ -733,7 +797,7 @@ async def get_least_memory_gpu():
     Raises:
         HTTPException: If the underlying HTTP request fails.
     """
-    url = f"http://{settings.controller_host}:{settings.controller_port}/least_memory_gpu"
+    url = f"{controller_base_url()}/least_memory_gpu"
     return await controller_get(url)
 
 
@@ -754,7 +818,7 @@ async def frontend_discover_vpn(session: dict = Depends(get_session)):
         raise HTTPException(status_code=401, detail="Login required")
 
     # 2) Build the controller URL (using host/port from settings)
-    url = f"http://{settings.controller_host}:{settings.controller_port}/discover-vpn"
+    url = f"{controller_base_url()}/discover-vpn"
 
     try:
         # 3) Call the controller's /discover-vpn endpoint
@@ -800,7 +864,7 @@ async def proxy_physical_state(ip: str, request: Request, session: dict = Depend
     if not address.is_private:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only private IP addresses are allowed")
 
-    url = f"http://{settings.controller_host}:{settings.controller_port}/physical/state/{ip}"
+    url = f"{controller_base_url()}/physical/state/{ip}"
     return await controller_get(url)
 
 
@@ -810,7 +874,7 @@ async def physical_nodes_available(ips: list[str]) -> bool:
     Any error or timeout counts as *not available*.
     """
     tasks = [
-        controller_get(f"http://{settings.controller_host}:{settings.controller_port}/physical/state/{ip}")
+        controller_get(f"{controller_base_url()}/physical/state/{ip}")
         for ip in ips
     ]
     states = await asyncio.gather(*tasks, return_exceptions=True)
@@ -838,7 +902,7 @@ async def deploy_scenario(scenario_data, role, user):
     Raises:
         HTTPException: If the underlying HTTP POST request fails.
     """
-    url = f"http://{settings.controller_host}:{settings.controller_port}/scenarios/run"
+    url = f"{controller_base_url()}/scenarios/run"
     data = {"scenario_data": scenario_data, "role": role, "user": user}
     return await controller_post(url, data)
 
@@ -863,7 +927,7 @@ async def stop_scenario_by_name(scenario_name, username, all=False):
     Raises:
         HTTPException: If the request to the controller fails or returns an error.
     """
-    url = f"http://{settings.controller_host}:{settings.controller_port}/scenarios/stop"
+    url = f"{controller_base_url()}/scenarios/stop"
     data = {"scenario_name": scenario_name, "username": username, "all": all}
     return await controller_post(url, data)
 
@@ -882,7 +946,7 @@ async def get_scenarios(user, role):
     Raises:
         HTTPException: If the underlying HTTP GET request fails.
     """
-    url = f"http://{settings.controller_host}:{settings.controller_port}/scenarios/{user}/{role}"
+    url = f"{controller_base_url()}/scenarios/{user}/{role}"
     return await controller_get(url)
 
 
@@ -902,7 +966,7 @@ async def scenario_update_record(scenario_name, start_time, end_time, scenario, 
     Raises:
         HTTPException: If the underlying HTTP POST request fails.
     """
-    url = f"http://{settings.controller_host}:{settings.controller_port}/scenarios/update"
+    url = f"{controller_base_url()}/scenarios/update"
     data = {
         "scenario_name": scenario_name,
         "start_time": start_time,
@@ -926,7 +990,7 @@ async def scenario_set_status_to_finished(scenario_name, all=False):
     Raises:
         HTTPException: If the underlying HTTP POST request fails.
     """
-    url = f"http://{settings.controller_host}:{settings.controller_port}/scenarios/set_status_to_finished"
+    url = f"{controller_base_url()}/scenarios/set_status_to_finished"
     data = {"scenario_name": scenario_name, "all": all}
     await controller_post(url, data)
 
@@ -941,7 +1005,7 @@ async def remove_scenario_by_name(scenario_name):
     Raises:
         HTTPException: If the underlying HTTP POST request fails.
     """
-    url = f"http://{settings.controller_host}:{settings.controller_port}/scenarios/remove"
+    url = f"{controller_base_url()}/scenarios/remove"
     data = {"scenario_name": scenario_name}
     await controller_post(url, data)
 
@@ -960,7 +1024,7 @@ async def check_scenario_with_role(role, scenario_name):
     Raises:
         HTTPException: If the underlying HTTP GET request fails.
     """
-    url = f"http://{settings.controller_host}:{settings.controller_port}/scenarios/check/{role}/{scenario_name}"
+    url = f"{controller_base_url()}/scenarios/check/{role}/{scenario_name}"
     check_data = await controller_get(url)
     return check_data.get("allowed", False)
 
@@ -978,7 +1042,7 @@ async def get_scenario_by_name(scenario_name):
     Raises:
         HTTPException: If the underlying HTTP GET request fails.
     """
-    url = f"http://{settings.controller_host}:{settings.controller_port}/scenarios/{scenario_name}"
+    url = f"{controller_base_url()}/scenarios/{scenario_name}"
     return await controller_get(url)
 
 
@@ -995,7 +1059,7 @@ async def get_running_scenarios(get_all=False):
     Raises:
         HTTPException: If the underlying HTTP GET request fails.
     """
-    url = f"http://{settings.controller_host}:{settings.controller_port}/scenarios/running?get_all={get_all}"
+    url = f"{controller_base_url()}/scenarios/running?get_all={get_all}"
     return await controller_get(url)
 
 
@@ -1012,7 +1076,7 @@ async def list_nodes_by_scenario_name(scenario_name):
     Raises:
         HTTPException: If the underlying HTTP GET request fails.
     """
-    url = f"http://{settings.controller_host}:{settings.controller_port}/nodes/{scenario_name}"
+    url = f"{controller_base_url()}/nodes/{scenario_name}"
     return await controller_get(url)
 
 
@@ -1054,7 +1118,7 @@ async def update_node_record(
     Raises:
         HTTPException: If the underlying HTTP POST request fails.
     """
-    url = f"http://{settings.controller_host}:{settings.controller_port}/nodes/update"
+    url = f"{controller_base_url()}/nodes/update"
     data = {
         "node_uid": uid,
         "node_idx": idx,
@@ -1084,7 +1148,7 @@ async def remove_nodes_by_scenario_name(scenario_name):
     Raises:
         HTTPException: If the underlying HTTP POST request fails.
     """
-    url = f"http://{settings.controller_host}:{settings.controller_port}/nodes/remove"
+    url = f"{controller_base_url()}/nodes/remove"
     data = {"scenario_name": scenario_name}
     await controller_post(url, data)
 
@@ -1102,7 +1166,7 @@ async def get_notes(scenario_name):
     Raises:
         HTTPException: If the underlying HTTP GET request fails.
     """
-    url = f"http://{settings.controller_host}:{settings.controller_port}/notes/{scenario_name}"
+    url = f"{controller_base_url()}/notes/{scenario_name}"
     return await controller_get(url)
 
 
@@ -1117,7 +1181,7 @@ async def save_notes(scenario_name, notes):
     Raises:
         HTTPException: If the underlying HTTP POST request fails.
     """
-    url = f"http://{settings.controller_host}:{settings.controller_port}/notes/update"
+    url = f"{controller_base_url()}/notes/update"
     data = {"scenario_name": scenario_name, "notes": notes}
     await controller_post(url, data)
 
@@ -1132,7 +1196,7 @@ async def remove_note(scenario_name):
     Raises:
         HTTPException: If the underlying HTTP POST request fails.
     """
-    url = f"http://{settings.controller_host}:{settings.controller_port}/notes/remove"
+    url = f"{controller_base_url()}/notes/remove"
     data = {"scenario_name": scenario_name}
     await controller_post(url, data)
 
@@ -1147,7 +1211,7 @@ async def list_users(allinfo=True):
     Returns:
     - A list of users, as provided by the controller.
     """
-    url = f"http://{settings.controller_host}:{settings.controller_port}/user/list?all_info={allinfo}"
+    url = f"{controller_base_url()}/user/list?all_info={allinfo}"
     data = await controller_get(url)
     user_list = data["users"]
 
@@ -1164,7 +1228,7 @@ async def get_user_by_scenario_name(scenario_name):
     Returns:
     - dict: The user data associated with the specified scenario.
     """
-    url = f"http://{settings.controller_host}:{settings.controller_port}/user/{scenario_name}"
+    url = f"{controller_base_url()}/user/{scenario_name}"
     return await controller_get(url)
 
 
@@ -1180,7 +1244,7 @@ async def add_user(user, password, role):
     Returns:
     - None
     """
-    url = f"http://{settings.controller_host}:{settings.controller_port}/user/add"
+    url = f"{controller_base_url()}/user/add"
     data = {"user": user, "password": password, "role": role}
     await controller_post(url, data)
 
@@ -1197,7 +1261,7 @@ async def update_user(user, password, role):
     Returns:
     - None
     """
-    url = f"http://{settings.controller_host}:{settings.controller_port}/user/update"
+    url = f"{controller_base_url()}/user/update"
     data = {"user": user, "password": password, "role": role}
     await controller_post(url, data)
 
@@ -1212,7 +1276,7 @@ async def get_users_roles():
     Returns:
         dict: {"users": [...], "platform_admin": str | None, "first_registered": str | None}
     """
-    url = f"http://{settings.controller_host}:{settings.controller_port}/users/roles"
+    url = f"{controller_base_url()}/users/roles"
     return await controller_get(url)
 
 
@@ -1259,7 +1323,7 @@ async def delete_user(user):
     Returns:
     - None
     """
-    url = f"http://{settings.controller_host}:{settings.controller_port}/user/delete"
+    url = f"{controller_base_url()}/user/delete"
     data = {"user": user}
     await controller_post(url, data)
 
@@ -1279,7 +1343,7 @@ async def verify_user(username: str, password: str) -> bool:
         HTTPException: If there's an error communicating with the controller
     """
     try:
-        url = f"http://{settings.controller_host}:{settings.controller_port}/user/verify"
+        url = f"{controller_base_url()}/user/verify"
         logging.info(f"Verifying user {username} with controller at {url}")
 
         response = await controller_post(url, {"user": username, "password": password})
@@ -1939,10 +2003,11 @@ async def get_host_resources():
         dict: Parsed JSON resource metrics on success, or {'error': <message>} on parse failure.
         None: If the HTTP response status is not 200.
     """
-    url = f"http://{settings.controller_host}:{settings.controller_port}/resources"
+    url = f"{controller_base_url()}/resources"
+    headers = _controller_request_headers()
 
     async def _get_resources():
-        async with aiohttp.ClientSession() as session, session.get(url) as response:
+        async with aiohttp.ClientSession() as session, session.get(url, headers=headers) as response:
             if response.status == 200:
                 try:
                     return await response.json()
@@ -2739,6 +2804,8 @@ def _smac_deps():
         databases_dir=databases_dir,
         controller_host=settings.controller_host,
         controller_port=settings.controller_port,
+        controller_base_url=controller_base_url(),
+        controller_token=_controller_token(),
         controller_name=os.environ.get("NEBULA_CONTROLLER_NAME", ""),
         api_key=resolve_gemini_key(
             os.environ.get("GEMINI_API_KEY", "") or os.environ.get("GOOGLE_API_KEY", "")

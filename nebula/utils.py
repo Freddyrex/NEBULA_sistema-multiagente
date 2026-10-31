@@ -172,6 +172,22 @@ class DockerUtils:
     """
 
     @classmethod
+    def is_available(cls) -> bool:
+        """
+        Checks whether a Docker daemon is reachable from this process.
+
+        Returns:
+            bool: True when the Docker client can talk to a daemon, False on
+                hosts without a Docker daemon (managed PaaS, CI, etc.).
+        """
+        try:
+            client = docker.from_env()
+            client.ping()
+        except Exception:
+            return False
+        return True
+
+    @classmethod
     def create_docker_network(cls, network_name, subnet=None, prefix=24):
         """
         Creates a Docker bridge network with a given name and optional subnet.

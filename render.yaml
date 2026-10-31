@@ -7,3 +7,106 @@ services:
     startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
     plan: free
     healthCheckPath: /health
+
+  - type: web
+    name: nebula-controller
+    runtime: python
+    buildCommand: pip install -e ".[render]"
+    startCommand: uvicorn nebula.controller.controller:app --host 0.0.0.0 --port $PORT
+    plan: free
+    healthCheckPath: /status
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.7"
+      - key: NEBULA_PRODUCTION
+        value: "True"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: NEBULA_CONTROLLER_TOKEN
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: nebula-db
+          property: connectionString
+      - key: NEBULA_DATABASES_DIR
+        value: app/databases
+      - key: NEBULA_CONTROLLER_LOG
+        value: app/logs/controller.log
+      - key: NEBULA_LOGS_DIR
+        value: app/logs
+      - key: NEBULA_CONFIG_DIR
+        value: app/config
+      - key: NEBULA_CERTS_DIR
+        value: app/certs
+      - key: NEBULA_FRONTEND_SCHEME
+        value: https
+      - key: NEBULA_FRONTEND_HOST
+        fromService:
+          type: web
+          name: nebula-frontend
+          property: host
+      - key: NEBULA_FRONTEND_PORT
+        value: "443"
+
+  - type: web
+    name: nebula-api
+    runtime: python
+    buildCommand: pip install -e ".[render]"
+    startCommand: uvicorn nebula.controller.api.standalone:app --host 0.0.0.0 --port $PORT
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.7"
+      - key: NEBULA_PRODUCTION
+        value: "True"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: nebula-db
+          property: connectionString
+
+  - type: web
+    name: nebula-frontend
+    runtime: python
+    buildCommand: pip install -e ".[render]"
+    startCommand: uvicorn nebula.frontend.app:app --host 0.0.0.0 --port $PORT
+    plan: free
+    healthCheckPath: /platform/
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.7"
+      - key: NEBULA_PRODUCTION
+        value: "True"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: NEBULA_FRONTEND_LOG
+        value: app/logs/frontend.log
+      - key: NEBULA_CONTROLLER_SCHEME
+        value: https
+      - key: NEBULA_CONTROLLER_HOST
+        fromService:
+          type: web
+          name: nebula-controller
+          property: host
+      - key: NEBULA_CONTROLLER_PORT
+        value: "443"
+      - key: NEBULA_CONTROLLER_TOKEN
+        # Debe coincidir con el token generado en nebula-controller.
+        # Render no puede compartir un valor generado entre servicios:
+        # se fija manualmente (dashboard/API) y `sync: false` lo preserva.
+        sync: false
+      - key: NEBULA_LOGS_DIR
+        value: app/logs
+      - key: NEBULA_CONFIG_DIR
+        value: app/config
+
+databases:
+  - name: nebula-db
+    plan: free
+    postgresMajorVersion: "18"

@@ -104,6 +104,33 @@ def require_controller_token(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid controller token")
 
 
+def _frontend_base_url() -> str:
+    """Return the base URL used to call back into the frontend service.
+
+    Resolution order: NEBULA_FRONTEND_PUBLIC_ENDPOINT (absolute URL, used
+    as-is), then NEBULA_FRONTEND_SCHEME/HOST/PORT, and finally the Docker
+    Compose DNS name ``{NEBULA_CONTROLLER_NAME}_nebula-frontend``.
+
+    Returns:
+        str: The frontend base URL without a trailing slash.
+    """
+    endpoint = str(os.environ.get("NEBULA_FRONTEND_PUBLIC_ENDPOINT") or "").strip().rstrip("/")
+    if endpoint:
+        return endpoint
+    host = str(os.environ.get("NEBULA_FRONTEND_HOST") or "").strip()
+    if host:
+        scheme = str(os.environ.get("NEBULA_FRONTEND_SCHEME") or "https").strip().rstrip(":/").lower() or "https"
+        try:
+            port = int(os.environ.get("NEBULA_FRONTEND_PORT") or 443)
+        except (TypeError, ValueError):
+            port = 443
+        if port in (80, 443):
+            return f"{scheme}://{host}"
+        return f"{scheme}://{host}:{port}"
+    name = os.environ.get("NEBULA_CONTROLLER_NAME", "")
+    return f"http://{name}_nebula-frontend"
+
+
 def _frontend_service_headers() -> dict[str, str]:
     """Build the headers used to authenticate the calls to the frontend.
 
@@ -240,12 +267,19 @@ def configure_logger(controller_log):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    databases_dir: str = os.environ.get("NEBULA_DATABASES_DIR")
-    controller_log: str = os.environ.get("NEBULA_CONTROLLER_LOG")
+    databases_dir: str = os.environ.get("NEBULA_DATABASES_DIR") or os.path.join(
+        os.getcwd(), "app", "databases"
+    )
+    controller_log: str = os.environ.get("NEBULA_CONTROLLER_LOG") or os.path.join(
+        os.getcwd(), "app", "logs", "controller.log"
+    )
 
     from nebula.controller.database import initialize_databases
 
     _assert_controller_token_configured()
+
+    os.makedirs(databases_dir, exist_ok=True)
+    os.makedirs(os.path.dirname(os.path.abspath(controller_log)), exist_ok=True)
 
     await initialize_databases(databases_dir)
     init_api()  # tablas de la API JWT (usuarios, refresh tokens, experimentos)
@@ -400,6 +434,42 @@ async def get_available_gpu():
         except Exception:  # noqa: S110
             pass
 
+    # Hosts without NVML (CPU-only, cloud) must still return the expected shape.
+    return {
+        "available_gpus": available_gpus,
+    }
+
+
+def _docker_available() -> bool:
+    """Return True when a Docker daemon is reachable from this process.
+
+    Returns:
+        bool: True when the Docker client can talk to a daemon, False otherwise
+            (for example on a managed PaaS without nested containers).
+    """
+    return DockerUtils.is_available()
+
+
+def _assert_deployment_supported(scenario_data: dict) -> None:
+    """Reject scenario deployments that the current host cannot execute.
+
+    Args:
+        scenario_data (dict): The scenario configuration sent by the client.
+
+    Raises:
+        HTTPException: With status 501 when a docker deployment is requested on a
+            host without a Docker daemon.
+    """
+    deployment = str(scenario_data.get("deployment") or "").strip().lower()
+    if deployment == "docker" and not _docker_available():
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail=(
+                "docker deployment is not available on this host "
+                "(no Docker daemon); use deployment='physical' with registered nodes"
+            ),
+        )
+
 
 def validate_physical_fields(data: dict):
     if data.get("deployment") != "physical":
@@ -447,6 +517,7 @@ async def run_scenario(
     from nebula.controller.scenarios import ScenarioManagement
 
     validate_physical_fields(scenario_data)
+    _assert_deployment_supported(scenario_data)
     _validate_role(role)
 
     # Manager for the actual scenario
@@ -807,7 +878,7 @@ async def update_nodes(
         raise HTTPException(status_code=500, detail="Internal server error")
 
     url = (
-        f"http://{os.environ['NEBULA_CONTROLLER_NAME']}_nebula-frontend/platform/dashboard/{scenario_name}/node/update"
+        f"{_frontend_base_url()}/platform/dashboard/{scenario_name}/node/update"
     )
 
     config["timestamp"] = str(timestamp)
@@ -843,7 +914,7 @@ async def node_done(
 
     Returns the response from the frontend or raises an HTTPException if it fails.
     """
-    url = f"http://{os.environ['NEBULA_CONTROLLER_NAME']}_nebula-frontend/platform/dashboard/{scenario_name}/node/done"
+    url = f"{_frontend_base_url()}/platform/dashboard/{scenario_name}/node/done"
 
     data = await request.json()
 
