@@ -8,6 +8,7 @@ Then check the endpoint:
 
     curl http://127.0.0.1:8010/health
 """
+import os
 from fastapi import FastAPI
 
 app = FastAPI(title="NEBULA Health API", version="1.1.0")
