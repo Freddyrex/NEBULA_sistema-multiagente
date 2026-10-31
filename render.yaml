@@ -2,8 +2,7 @@ services:
   - type: web
     name: nebula-health
     runtime: docker
-    dockerfilePath: ./nebula/healthcheck/Dockerfile
-    dockerContext: ./nebula/healthcheck
+    rootDir: nebula/healthcheck
     plan: free
     healthCheckPath: /health
     envVars:
