@@ -1,0 +1,110 @@
+# NEBULA · execution-interpreter thresholds (Sprint 2, ROADMAP_AGENTE_ADAPTATIVO).
+# Reglas deterministas del intérprete: el LLM no calcula, solo explica los
+# hallazgos que estas reglas producen. Edita aquí, no en el código.
+# `min_rounds`: historial mínimo para las reglas con memoria (plateau, presión
+# sostenida, sobreaprovisionamiento). Las reglas puntuales (brecha F1, recall,
+# térmica, straggler, bizantina) disparan con >= 1 ronda.
+min_rounds: 4
+
+# Plateau de accuracy: rango (max-min) de las últimas `plateau_k` rondas < eps.
+plateau_eps: 0.005
+plateau_k: 3
+
+# Brecha F1 vs accuracy (desbalance): |final_acc - final_f1| > gap.
+f1_accuracy_gap: 0.10
+
+# Recall macro bajo: final < min_recall.
+min_recall: 0.60
+
+# Presión sostenida de recursos: media de las últimas N rondas > high
+# (warning) o > critical (critical).
+ram_high: 85.0
+ram_critical: 95.0
+cpu_high: 85.0
+cpu_critical: 95.0
+pressure_min_rounds: 3
+
+# Riesgo térmico: sensor real > temp_high (warning) / > temp_critical (critical);
+# estimado ARX > temp_est_high (warning, citado como estimado).
+temp_high: 80.0
+temp_critical: 90.0
+temp_est_high: 85.0
+
+# Stragglers: el digest ya filtra con STRAGGLER_RATIO (misma familia que el
+# StragglerPredictor en vivo); aquí se exponen los de ratio >= este valor.
+straggler_ratio: 1.5
+
+# Sospecha bizantina: métricas cuyos outliers de última ronda se exponen
+# (proxy puntual; la varianza real de updates llega en el Sprint 3).
+byzantine_metrics:
+  - accuracy
+  - f1_macro
+
+# Rondas sobreaprovisionadas: rondas completadas más allá de converged_at.
+overprovision_extra_rounds: 3
+
+# Sprint 3: política de agregador (sugerir, nunca auto-ejecutar).
+# Prioridad: bizantina > stragglers > retorno a FedAvg en limpio.
+# `cooldown_rounds`: no sugerir (ni re-ejecutar) dentro de la ventana tras un
+# cambio o un rechazo del mismo objetivo. `aggregator_auto` de scenario.json
+# queda reservado (Sprint 7): aunque sea true, toda sugerencia exige
+# confirmación humana.
+aggregator_policy:
+  cooldown_rounds: 3
+  byzantine_target: Krum
+  straggler_target: TrimmedMean
+  clean_target: FedAvg
+
+# Sprint 4: modelo de costo (ningún cambio de arquitectura sin costo).
+# Recurso proyectado sobre estos límites => "no conviene" / rechazo backend.
+cost_model:
+  ram_limit: 90.0
+  cpu_limit: 90.0
+  temp_limit: 85.0
+  temp_est_limit: 90.0
+  min_gain: 0.01
+  max_lost_rounds: 5
+  min_rounds_for_trend: 4
+
+# Sprint 5: políticas de arquitectura (rondas/modelo). Todo cambio pasa por
+# costo (Sprint 4) y confirmación; la whitelist es rounds/epochs/batch_size/
+# agregador/modelo compatible.
+architecture_policy:
+  # Recorte por plateau: nuevo total = converged_at + plateau_buffer.
+  plateau_buffer: 1
+  # Ampliación: pendiente fuerte (accuracy/ronda) + pocas rondas restantes.
+  improvement_slope: 0.02
+  end_margin: 2
+  extend_rounds: 3
+  # Divergencia: loss subiendo (eps/ronda en ventana k) con accuracy plana.
+  loss_rise_eps: 0.005
+  divergence_k: 3
+  # Reducción de epochs locales ante divergencia.
+  epochs_step: 1
+  epochs_min: 1
+
+# Sprint 7: verificación post-cambio (proyectado vs medido a las K rondas) e
+# informe final por escenario. K configurable; la calibración resultante es un
+# reporte (no auto-ajuste de umbrales).
+verification:
+  k_rounds: 3
+
+# Fase 2 (agente tipo Copilot): mapa hallazgo → sugerencia accionable, sin LLM.
+# Cada hallazgo con sugerencia aplicable pausa la simulación (con
+# pause_on_suggestion); un hallazgo sin sugerencia solo se informa.
+suggest_from_findings:
+  # byzantine_suspected → agregador robusto (hot).
+  byzantine_aggregator: Median
+  # straggler sostenido → agregador tolerante al retraso (hot).
+  straggler_aggregator: TrimmedMean
+  # straggler por topología (nodo con muy pocos vecinos) → re-topologizar
+  # (structural). `min_neighbors`: por debajo se considera cuello de botella.
+  topology_min_neighbors: 2
+  topology_target: Ring
+  # ram_pressure/thermal sostenidos → modelo más liviano o batch_size menor
+  # (structural). `ram_pressure_gain`: ganancia esperada de la hipótesis.
+  pressure_batch_size: 8
+  # f1_recall_gap/low_recall con IID bajo → federación, solo con hipótesis
+  # explícita; si no hay hipótesis cae en rejected[] con "no conviene".
+  low_recall_federation: CFL
+

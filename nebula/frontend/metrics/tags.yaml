@@ -1,0 +1,21 @@
+# NEBULA · tags/canonical metrics versionados (§6.8).
+# Bump `schema_version` si cambia la agregación o el set de métricas.
+schema_version: "1.1"
+round_agg:
+  accuracy: mean
+  loss: mean
+  f1_macro: mean
+  recall_macro: mean
+  precision_macro: mean
+  cpu_percent: mean
+  ram_percent: mean
+  cpu_temp: mean
+  round_time_s: mean
+  bytes_sent: last
+  bytes_received: last
+  cpu_temp_est: mean
+  gpu_temp_est: mean
+  energy_total: sum
+  energy_estimated: sum
+no_outlier_metrics:
+  - round_time_s

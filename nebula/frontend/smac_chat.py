@@ -59,6 +59,47 @@ from nebula.frontend.conversation import build_conversation_context
 DEFAULT_CHAT_MODEL = SMAC_CHAT_MODEL
 DEFAULT_CHAT_REASONING_EFFORT = SMAC_REASONING_EFFORT
 
+
+def controller_api_url(
+    path: str,
+    controller_base_url: str = "",
+    controller_host: str = "",
+    controller_port: int = 0,
+) -> str:
+    """Build a controller URL, preferring the absolute base URL when available.
+
+    Args:
+        path: Path appended to the base URL (must start with ``/``).
+        controller_base_url: Absolute controller URL (e.g. ``https://host``).
+        controller_host: Fallback controller host.
+        controller_port: Fallback controller port.
+
+    Returns:
+        The absolute URL of the controller endpoint.
+    """
+    base = str(controller_base_url or "").strip().rstrip("/")
+    if not base:
+        host = str(controller_host or "127.0.0.1").strip()
+        port = int(controller_port or 5050)
+        base = f"http://{host}:{port}"
+    return f"{base}{path}"
+
+
+def controller_auth_headers(controller_token: str = "") -> dict[str, str]:
+    """Build the headers carrying the internal controller service token.
+
+    Args:
+        controller_token: The service token shared with the controller.
+
+    Returns:
+        The Authorization header when a token is configured, empty otherwise.
+    """
+    token = str(controller_token or "").strip()
+    if not token:
+        return {}
+    return {"Authorization": f"Bearer {token}"}
+
+
 ACTION_KINDS = (
     "pause_node",
     "resume_node",
@@ -2498,6 +2539,8 @@ async def execute_resume_from(
     username: str,
     params: dict[str, Any],
     http_client: httpx.AsyncClient | None = None,
+    controller_base_url: str = "",
+    controller_token: str = "",
 ) -> dict[str, Any]:
     """Launch a linked child execution (Sprint 6).
 
@@ -2509,14 +2552,19 @@ async def execute_resume_from(
     ok, reason, child = _validate_resume(config_dir, params or {})
     if not ok:
         return {"ok": False, "detail": reason}
-    url = f"http://{controller_host}:{controller_port}/scenarios/run"
+    url = controller_api_url(
+        "/scenarios/run", controller_base_url, controller_host, controller_port)
+    headers = controller_auth_headers(controller_token)
     data = {"scenario_data": child, "role": "user", "user": username}
+    request_kwargs: dict[str, Any] = {"json": data}
+    if headers:
+        request_kwargs["headers"] = headers
     try:
         if http_client is None:
             async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_S) as client:
-                response = await client.post(url, json=data)
+                response = await client.post(url, **request_kwargs)
         else:
-            response = await http_client.post(url, json=data)
+            response = await http_client.post(url, **request_kwargs)
         response.raise_for_status()
         try:
             launched = response.json()
@@ -2537,16 +2585,23 @@ async def execute_stop_scenario(
     scenario_name: str,
     username: str,
     http_client: httpx.AsyncClient | None = None,
+    controller_base_url: str = "",
+    controller_token: str = "",
 ) -> dict[str, Any]:
     """Stop a scenario through the controller API."""
-    url = f"http://{controller_host}:{controller_port}/scenarios/stop"
+    url = controller_api_url(
+        "/scenarios/stop", controller_base_url, controller_host, controller_port)
+    headers = controller_auth_headers(controller_token)
     data = {"scenario_name": scenario_name, "username": username, "all": False}
+    request_kwargs: dict[str, Any] = {"json": data}
+    if headers:
+        request_kwargs["headers"] = headers
     try:
         if http_client is None:
             async with httpx.AsyncClient(timeout=HTTP_TIMEOUT_S) as client:
-                response = await client.post(url, json=data)
+                response = await client.post(url, **request_kwargs)
         else:
-            response = await http_client.post(url, json=data)
+            response = await http_client.post(url, **request_kwargs)
         response.raise_for_status()
         return {"ok": True, "detail": f"stop requested for {scenario_name}", "response": response.text[:AUDIT_TRUNC_CHARS]}
     except Exception as e:
@@ -2631,6 +2686,8 @@ async def execute_action(
     controller_port: int,
     controller_name: str,
     log_dir: str | None = None,
+    controller_base_url: str = "",
+    controller_token: str = "",
 ) -> dict[str, Any]:
     kind = record["kind"]
     params = record.get("params", {}) or {}
@@ -2678,10 +2735,13 @@ async def execute_action(
             {"peer": peer},
         )
     if kind == "stop_scenario":
-        return await execute_stop_scenario(controller_host, controller_port, scenario, username)
+        return await execute_stop_scenario(
+            controller_host, controller_port, scenario, username,
+            controller_base_url=controller_base_url, controller_token=controller_token)
     if kind == "resume_from":
         return await execute_resume_from(
-            config_dir, controller_host, controller_port, scenario, username, params)
+            config_dir, controller_host, controller_port, scenario, username, params,
+            controller_base_url=controller_base_url, controller_token=controller_token)
     if kind == "propose_new_simulation":
         # Fase 4: no ejecuta nada en vivo; materializa el borrador y devuelve la
         # URL de la pantalla de creación precargada (`?draft=<id>`).
